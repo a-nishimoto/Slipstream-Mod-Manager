@@ -103,6 +103,19 @@ public class ModPatchThread extends Thread {
 	}
 
 
+	/**
+	 * Logs a non-fatal problem and reports it to the observer.
+	 *
+	 * Warnings used to be log-only, and modman-log.txt is truncated on every
+	 * launch, so the conditions that most often explain "my mod did nothing"
+	 * never reached the person who needed them.
+	 */
+	private void warn( String message ) {
+		log.warn( message );
+		observer.patchingWarning( message );
+	}
+
+
 	private boolean patch() throws IOException, JDOMException {
 
 		observer.patchingProgress( 0, progMax );
@@ -267,7 +280,7 @@ public class ModPatchThread extends Thread {
 
 						Matcher m = pathPtn.matcher( innerPath );
 						if ( !m.matches() ) {
-							log.warn( String.format( "Unexpected innerPath: %s", innerPath ) );
+							warn( String.format( "%s: ignored an oddly named file \"%s\".", modFile.getName(), innerPath ) );
 							zis.closeEntry();
 							continue;
 						}
@@ -279,7 +292,7 @@ public class ModPatchThread extends Thread {
 						AbstractPack pack = packContainer.getPackFor( innerPath );
 						if ( pack == null ) {
 							if ( !knownRoots.contains( root ) ) {
-								log.warn( String.format( "Unexpected innerPath: %s", innerPath ) );
+								warn( String.format( "%s: ignored \"%s\" -- \"%s\" is not a folder FTL loads.", modFile.getName(), innerPath, root ) );
 							} else {
 								log.debug( String.format( "Ignoring innerPath with known root: %s", innerPath ) );
 							}
@@ -298,13 +311,20 @@ public class ModPatchThread extends Thread {
 							innerPath = checkCase( innerPath, knownPaths, knownPathsLower );
 
 							if ( !pack.contains( innerPath ) ) {
-								log.warn( String.format( "Non-existent innerPath wasn't appended: %s", innerPath ) );
+								warn( String.format( "%s: nothing was patched -- \"%s\" does not exist in FTL's resources. Check the filename, or whether an earlier mod was supposed to create it.", modFile.getName(), innerPath ) );
 							}
 							else {
 								InputStream mainStream = null;
 								try {
 									mainStream = pack.getInputStream( innerPath );
-									InputStream mergedStream = ModUtilities.patchXMLFile( mainStream, zis, ultimateEncoding, globalPanic, pack.getName()+":"+innerPath, modFile.getName()+":"+parentPath+fileName );
+									final String warnPrefix = modFile.getName() +": "+ innerPath;
+									PatchWarningListener patchWarner = new PatchWarningListener() {
+										@Override
+										public void patchWarning( String message ) {
+											warn( warnPrefix +": "+ message );
+										}
+									};
+									InputStream mergedStream = ModUtilities.patchXMLFile( mainStream, zis, ultimateEncoding, globalPanic, pack.getName()+":"+innerPath, modFile.getName()+":"+parentPath+fileName, patchWarner );
 									mainStream.close();
 									pack.remove( innerPath );
 									pack.add( innerPath, mergedStream );
@@ -324,7 +344,7 @@ public class ModPatchThread extends Thread {
 							innerPath = checkCase( innerPath, knownPaths, knownPathsLower );
 
 							if ( !pack.contains( innerPath ) ) {
-								log.warn( String.format( "Non-existent innerPath wasn't raw appended: %s", innerPath ) );
+								warn( String.format( "%s: nothing was raw-appended -- \"%s\" does not exist in FTL's resources.", modFile.getName(), innerPath ) );
 							}
 							else {
 								log.warn( String.format( "Appending xml as raw text: %s", innerPath ) );
@@ -362,7 +382,7 @@ public class ModPatchThread extends Thread {
 							if ( !moddedItems.contains( innerPath ) ) {
 								moddedItems.add( innerPath );
 							} else {
-								log.warn( String.format( "Clobbering earlier mods: %s", innerPath ) );
+								warn( String.format( "%s: overwrote \"%s\" wholesale, discarding changes earlier mods made to it.", modFile.getName(), innerPath ) );
 							}
 
 							if ( pack.contains( innerPath ) )
@@ -377,7 +397,7 @@ public class ModPatchThread extends Thread {
 							if ( !moddedItems.contains( innerPath ) ) {
 								moddedItems.add( innerPath );
 							} else {
-								log.warn( String.format( "Clobbering earlier mods: %s", innerPath ) );
+								warn( String.format( "%s: overwrote \"%s\" wholesale, discarding changes earlier mods made to it.", modFile.getName(), innerPath ) );
 							}
 
 							if ( pack.contains( innerPath ) )
@@ -397,7 +417,7 @@ public class ModPatchThread extends Thread {
 							if ( !moddedItems.contains( innerPath ) ) {
 								moddedItems.add( innerPath );
 							} else {
-								log.warn( String.format( "Clobbering earlier mods: %s", innerPath ) );
+								warn( String.format( "%s: overwrote \"%s\" wholesale, discarding changes earlier mods made to it.", modFile.getName(), innerPath ) );
 							}
 
 							if ( pack.contains( innerPath ) )
@@ -410,7 +430,7 @@ public class ModPatchThread extends Thread {
 							if ( !moddedItems.contains( innerPath ) ) {
 								moddedItems.add( innerPath );
 							} else {
-								log.warn( String.format( "Clobbering earlier mods: %s", innerPath ) );
+								warn( String.format( "%s: overwrote \"%s\" wholesale, discarding changes earlier mods made to it.", modFile.getName(), innerPath ) );
 							}
 
 							if ( pack.contains( innerPath ) )
@@ -484,7 +504,7 @@ public class ModPatchThread extends Thread {
 		int lowerIndex = knownPathsLower.indexOf( lowerPath );
 		if ( lowerIndex != -1 ) {
 			String knownPath = knownPaths.get( lowerIndex );
-			log.warn( String.format( "Modded file's case doesn't match existing path: \"%s\" vs \"%s\"", innerPath, knownPath ) );
+			warn( String.format( "A mod's file \"%s\" differs in letter case from FTL's \"%s\"; the existing path was used.", innerPath, knownPath ) );
 			return knownPath;
 		}
 

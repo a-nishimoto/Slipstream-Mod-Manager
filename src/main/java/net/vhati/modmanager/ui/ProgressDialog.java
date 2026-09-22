@@ -193,7 +193,7 @@ public class ProgressDialog extends JDialog implements ActionListener {
 				successTask.run();
 			}
 		}
-		if ( continueOnSuccess && succeeded && successTask != null ) {
+		if ( shouldContinueAutomatically() && succeeded && successTask != null ) {
 			ProgressDialog.this.setVisible( false );
 			ProgressDialog.this.dispose();
 			successTask.run();
@@ -202,6 +202,18 @@ public class ProgressDialog extends JDialog implements ActionListener {
 			continueBtn.setEnabled( true );
 			continueBtn.requestFocusInWindow();
 		}
+	}
+
+
+	/**
+	 * Whether a successful task should dismiss this dialog and run its success
+	 * task without waiting for the user.
+	 *
+	 * Subclasses override this to hold the dialog open when there is something
+	 * the user ought to read first.
+	 */
+	protected boolean shouldContinueAutomatically() {
+		return continueOnSuccess;
 	}
 
 

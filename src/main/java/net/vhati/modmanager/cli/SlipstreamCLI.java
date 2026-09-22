@@ -267,6 +267,16 @@ public class SlipstreamCLI {
 				catch ( InterruptedException e ) {}
 			}
 
+			List<String> patchWarnings = patchObserver.getWarnings();
+			if ( !patchWarnings.isEmpty() ) {
+				// Repeated at the end so the count is not lost in the rest of
+				// the output, which is long for a big mod list.
+				System.err.println( String.format( "%nPatching finished with %d warning(s):", patchWarnings.size() ) );
+				for ( String message : patchWarnings ) {
+					System.err.println( "  - "+ message );
+				}
+			}
+
 			if ( !patchObserver.hasSucceeded() ) System.exit( 1 );
 		}
 
@@ -517,6 +527,7 @@ public class SlipstreamCLI {
 
 
 	private static class SilentPatchObserver implements ModPatchObserver {
+		private final List<String> warnings = new ArrayList<String>();
 		private boolean done = false;
 		private boolean succeeded = false;
 
@@ -533,6 +544,14 @@ public class SlipstreamCLI {
 		}
 
 		@Override
+		public synchronized void patchingWarning( String message ) {
+			// Collected only. ModPatchThread already logs each one as it
+			// happens, and logback writes that to stderr, so printing here too
+			// would double every line.
+			warnings.add( message );
+		}
+
+		@Override
 		public synchronized void patchingEnded( boolean outcome, Exception e ) {
 			succeeded = outcome;
 			done = true;
@@ -540,6 +559,7 @@ public class SlipstreamCLI {
 
 		public synchronized boolean isDone() { return done; }
 		public synchronized boolean hasSucceeded() { return succeeded; }
+		public synchronized List<String> getWarnings() { return new ArrayList<String>( warnings ); }
 	}
 
 

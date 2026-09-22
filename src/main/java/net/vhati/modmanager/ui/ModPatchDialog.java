@@ -12,6 +12,13 @@ import net.vhati.modmanager.ui.ProgressDialog;
 public class ModPatchDialog extends ProgressDialog implements ModPatchObserver {
 
 
+	/** Beyond this, the rest are counted but not listed; the log has them all. */
+	private static final int MAX_SHOWN_WARNINGS = 25;
+
+	private final java.util.List<String> warnings = new java.util.ArrayList<String>();
+	private int warningCount = 0;
+
+
 	public ModPatchDialog( Frame owner, boolean continueOnSuccess ) {
 		super( owner, continueOnSuccess );
 		this.setTitle( "Patching..." );
@@ -63,6 +70,46 @@ public class ModPatchDialog extends ProgressDialog implements ModPatchObserver {
 		setTaskOutcomeLater( outcome, e );
 	}
 
+	/**
+	 * Collects a non-fatal problem to show once patching ends.
+	 *
+	 * Not shown as it happens: the status area is overwritten by every
+	 * subsequent status update, so a warning displayed mid-run would be gone
+	 * within milliseconds.
+	 */
+	@Override
+	public void patchingWarning( final String message ) {
+		synchronized ( warnings ) {
+			if ( warnings.size() < MAX_SHOWN_WARNINGS ) {
+				warnings.add( message );
+			}
+			warningCount++;
+		}
+	}
+
+	/**
+	 * Returns true if patching succeeded but something was worth reporting.
+	 *
+	 * ManagerFrame checks this so a run with warnings does not auto-dismiss
+	 * into launching FTL before the user has read them.
+	 */
+	public boolean hasWarnings() {
+		synchronized ( warnings ) {
+			return warningCount > 0;
+		}
+	}
+
+
+	/**
+	 * Holds the dialog open when there are warnings, even if the user asked to
+	 * launch FTL straight after patching -- otherwise the window closes and the
+	 * game starts before anyone reads why a mod did nothing.
+	 */
+	@Override
+	protected boolean shouldContinueAutomatically() {
+		return super.shouldContinueAutomatically() && !hasWarnings();
+	}
+
 
 	@Override
 	protected void setTaskOutcome( boolean outcome, Exception e ) {
@@ -70,7 +117,27 @@ public class ModPatchDialog extends ProgressDialog implements ModPatchObserver {
 		if ( !this.isShowing() ) return;
 
 		if ( succeeded == true ) {
-			setStatusText( "Patching completed." );
+			StringBuilder buf = new StringBuilder();
+
+			synchronized ( warnings ) {
+				if ( warningCount == 0 ) {
+					buf.append( "Patching completed." );
+				}
+				else {
+					buf.append( String.format( "Patching completed, with %d warning(s).\n",
+						warningCount ) );
+					buf.append( "FTL was patched, but some mods may not have done what they intended.\n\n" );
+
+					for ( String message : warnings ) {
+						buf.append( "- " ).append( message ).append( "\n" );
+					}
+					if ( warningCount > warnings.size() ) {
+						buf.append( String.format( "- ...and %d more (see modman-log.txt).\n",
+							warningCount - warnings.size() ) );
+					}
+				}
+			}
+			setStatusText( buf.toString() );
 		} else {
 			setStatusText( String.format( "Patching failed: %s", e ) );
 		}
