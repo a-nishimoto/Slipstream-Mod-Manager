@@ -89,7 +89,7 @@ public class SlipstreamConfig {
 			userFieldsMap.put( RUN_STEAM_FTL,     "If true, SMM will use Steam to launch FTL, if possible." );
 			userFieldsMap.put( NEVER_RUN_FTL,     "If true, there will be no offer to run FTL after patching. Default: false." );
 			userFieldsMap.put( UPDATE_CATALOG,    "If a number greater than 0, check for new mod descriptions every N days." );
-			userFieldsMap.put( UPDATE_APP,        "If a number greater than 0, check for newer app versions every N days." );
+			userFieldsMap.put( UPDATE_APP,        "If a number greater than 0, check for newer app versions every N days. Defaults to 0 on this fork: the feed it checks is upstream's, and its downloads would replace this build." );
 			userFieldsMap.put( USE_DEFAULT_UI,    "If true, no attempt will be made to resemble a native GUI. Default: false." );
 			userFieldsMap.put( REMEMBER_GEOMETRY, "If true, window geometry will be saved on exit and restored on startup." );
 

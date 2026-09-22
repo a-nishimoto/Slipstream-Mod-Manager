@@ -35,7 +35,10 @@ public class FTLModManager {
 	private static final Logger log = LoggerFactory.getLogger( FTLModManager.class );
 
 	public static final String APP_NAME = "Slipstream Mod Manager";
-	public static final ComparableVersion APP_VERSION = new ComparableVersion( "1.9.1" );
+	// The trailing "f" marks this as a personal fork. ComparableVersion reads it
+	// as [1,9,2] with suffix "f", which sorts ABOVE a plain 1.9.2, so upstream
+	// cutting that release cannot make this build look out of date.
+	public static final ComparableVersion APP_VERSION = new ComparableVersion( "1.9.2f" );
 	public static final String APP_URL = "https://subsetgames.com/forum/viewtopic.php?f=12&t=17102";
 	public static final String APP_AUTHOR = "Vhati";
 
@@ -119,7 +122,7 @@ public class FTLModManager {
 			props.setProperty( SlipstreamConfig.RUN_STEAM_FTL, "" );       // Prompt.
 			props.setProperty( SlipstreamConfig.NEVER_RUN_FTL, "false" );
 			props.setProperty( SlipstreamConfig.UPDATE_CATALOG, "" );      // Prompt.
-			props.setProperty( SlipstreamConfig.UPDATE_APP, "" );          // Prompt.
+			props.setProperty( SlipstreamConfig.UPDATE_APP, "0" );         // Off: see below.
 			props.setProperty( SlipstreamConfig.USE_DEFAULT_UI, "false" );
 			props.setProperty( SlipstreamConfig.REMEMBER_GEOMETRY, "true" );
 			// "manager_geometry" doesn't have a default.
@@ -319,26 +322,30 @@ public class FTLModManager {
 			}
 
 			// Prompt if update_catalog is invalid or hasn't been set.
+			//
+			// This governs the mod catalog only. It used to set update_app too,
+			// so answering "yes" re-enabled the app-version check -- which on a
+			// fork points at upstream's feed and would offer a download that
+			// replaces this build. update_app now defaults to 0 and is left
+			// alone here. It is still editable in modman.cfg and Preferences for
+			// anyone who wants it back.
 			boolean askAboutUpdates = false;
 			if ( !appConfig.getProperty( SlipstreamConfig.UPDATE_CATALOG, "" ).matches( "^\\d+$" ) )
-				askAboutUpdates = true;
-			if ( !appConfig.getProperty( SlipstreamConfig.UPDATE_APP, "" ).matches( "^\\d+$" ) )
 				askAboutUpdates = true;
 
 			if ( askAboutUpdates ) {
 				String updatePrompt = ""
-					+ "Would you like Slipstream to periodically check for updates?\n"
+					+ "Would you like Slipstream to periodically download\n"
+					+ "updated mod descriptions?\n"
 					+ "\n"
 					+ "You can change this later.";
 
 				int response = JOptionPane.showConfirmDialog( null, updatePrompt, "Updates", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE );
 				if ( response == JOptionPane.YES_OPTION ) {
 					appConfig.setProperty( SlipstreamConfig.UPDATE_CATALOG, "7" );
-					appConfig.setProperty( SlipstreamConfig.UPDATE_APP, "4" );
 				}
 				else {
 					appConfig.setProperty( SlipstreamConfig.UPDATE_CATALOG, "0" );
-					appConfig.setProperty( SlipstreamConfig.UPDATE_APP, "0" );
 				}
 				writeConfig = true;
 			}

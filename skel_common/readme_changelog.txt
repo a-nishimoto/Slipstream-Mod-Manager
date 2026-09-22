@@ -1,6 +1,6 @@
 Changelog
 
-Unreleased (personal fork):
+1.9.2f (personal fork):
 - Now requires Java 17; builds and runs on current JDKs
 - Fixed ftl.dat corruption when patching was cancelled before the repack
 - Refused to rebuild a vanilla backup from dats that may already be modded
