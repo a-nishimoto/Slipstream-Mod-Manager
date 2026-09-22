@@ -535,9 +535,9 @@ public class ModXMLSandbox extends JFrame implements ActionListener {
 				chunk += "/";
 
 			boolean found = false;
-			Enumeration<DefaultMutableTreeNode> enumIt = currentNode.children();
+			Enumeration<?> enumIt = currentNode.children();
 			while ( enumIt.hasMoreElements()  ) {
-				DefaultMutableTreeNode tmpNode = enumIt.nextElement();
+				DefaultMutableTreeNode tmpNode = (DefaultMutableTreeNode)enumIt.nextElement();
 				if ( chunk.equals( tmpNode.getUserObject() ) ) {
 					found = true;
 					currentNode = tmpNode;
