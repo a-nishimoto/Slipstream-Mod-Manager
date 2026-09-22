@@ -391,7 +391,7 @@ public class ModUtilities {
 		Document doc = null;
 
 		try {
-			SAXBuilder strictParser = new SAXBuilder();
+			SAXBuilder strictParser = XMLSecurity.newSecureSAXBuilder();
 			strictParser.setSAXHandlerFactory( new EmptyAwareSAXHandlerFactory() );
 			doc = strictParser.build( new StringReader( srcSeq.toString() ) );
 		}
@@ -1023,7 +1023,7 @@ public class ModUtilities {
 
 		Document doc = null;
 		try {
-			SAXBuilder saxBuilder = new SAXBuilder();
+			SAXBuilder saxBuilder = XMLSecurity.newSecureSAXBuilder();
 			doc = saxBuilder.build( new StringReader( srcBuf.toString() ) );
 
 			xmlValid = true;

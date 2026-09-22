@@ -149,10 +149,18 @@ public class FolderPack extends AbstractPack {
 		File tmpFile = new File( rootDir, innerPath );
 
 		// Check if the file is inside rootDir.
-		File parentDir = tmpFile.getParentFile();
-		while( parentDir != null ) {
-			if ( parentDir.equals( rootDir ) ) return tmpFile;
-			parentDir = parentDir.getParentFile();
+		//
+		// This must compare canonical paths. java.io.File does not resolve
+		// ".." segments, so walking getParentFile() lexically would accept
+		// "data/../../evil" -- innerPaths come from untrusted mod archives.
+		try {
+			String rootPath = rootDir.getCanonicalPath();
+			if ( !rootPath.endsWith( File.separator ) ) rootPath += File.separator;
+
+			if ( tmpFile.getCanonicalPath().startsWith( rootPath ) ) return tmpFile;
+		}
+		catch ( IOException e ) {
+			throw new IllegalArgumentException( String.format( "InnerPath \"%s\" could not be resolved against the FolderPack at \"%s\"", innerPath, rootDir ), e );
 		}
 
 		throw new IllegalArgumentException( String.format( "InnerPath \"%s\" is outside the FolderPack at \"%s\"", innerPath, rootDir ) );

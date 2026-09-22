@@ -56,6 +56,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.vhati.ftldat.PackUtilities;
+import net.vhati.modmanager.core.XMLSecurity;
 import net.vhati.modmanager.core.ModDB;
 import net.vhati.modmanager.core.ModInfo;
 import net.vhati.modmanager.core.ModsInfo;
@@ -507,7 +508,7 @@ public class ForumScraper {
 	 */
 	private static ModDB parseCatalogXML( File srcFile ) throws IOException, JDOMException {
 		ModDB modDB = new ModDB();
-		SAXBuilder builder = new SAXBuilder();
+		SAXBuilder builder = XMLSecurity.newSecureSAXBuilder();
 		InputStream is = null;
 
 		try {

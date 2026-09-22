@@ -209,7 +209,8 @@ public class SlipstreamCLI {
 					srcPack.close();
 				}
 			}
-			catch ( IOException e ) {
+			catch ( IOException | IllegalArgumentException e ) {
+				// FolderPack rejects innerPaths that escape the extraction dir.
 				log.error( "Error extracting dats", e );
 				System.exit( 1 );
 			}

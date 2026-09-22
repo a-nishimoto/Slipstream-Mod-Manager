@@ -17,6 +17,7 @@ import org.jdom2.input.SAXBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.vhati.modmanager.core.XMLSecurity;
 import net.vhati.modmanager.core.ModDB;
 import net.vhati.modmanager.core.ModInfo;
 import net.vhati.modmanager.core.ModUtilities;
@@ -93,7 +94,7 @@ public class JDOMModMetadataReader {
 	public static ModInfo parse( String metadataText ) throws IOException, JDOMException {
 		ModInfo modInfo = new ModInfo();
 
-		SAXBuilder strictParser = new SAXBuilder();
+		SAXBuilder strictParser = XMLSecurity.newSecureSAXBuilder();
 		Document doc = strictParser.build( new StringReader( metadataText ) );
 		Element root = doc.getRootElement();
 
