@@ -9,6 +9,8 @@
 		<maven.compiler.release>17</maven.compiler.release>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<junit.version>5.10.2</junit.version>
+		<slf4j.version>2.0.18</slf4j.version>
+		<logback.version>1.6.3</logback.version>
 	</properties>
 
 	<!--
@@ -19,30 +21,36 @@
 		non-existent class files.
 	-->
 	<dependencies>
+		<!--
+			slf4j and logback MUST move together. slf4j 2.x binds via
+			ServiceLoader; logback 1.2.x binds via the old StaticLoggerBinder.
+			Mixing them gives a NOP logger: the app starts, behaves normally,
+			and silently never writes modman-log.txt.
+		-->
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-api</artifactId>
-			<version>1.7.25</version>
+			<version>${slf4j.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>jul-to-slf4j</artifactId>
-			<version>1.7.25</version>
+			<version>${slf4j.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>ch.qos.logback</groupId>
 			<artifactId>logback-core</artifactId>
-			<version>1.2.3</version>
+			<version>${logback.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>ch.qos.logback</groupId>
 			<artifactId>logback-classic</artifactId>
-			<version>1.2.3</version>
+			<version>${logback.version}</version>
 		</dependency>
-		<dependency>  <!-- Since 2.7, uses Java 7 features via reflection, but runs on Java 6. -->
+		<dependency>
 			<groupId>com.fasterxml.jackson.core</groupId>
 			<artifactId>jackson-databind</artifactId>
-			<version>2.7.9.2</version>  <!-- Since 2.8, will not run on Java 6. -->
+			<version>2.22.3</version>
 		</dependency>
 		<dependency>
 			<groupId>ar.com.hjg</groupId>
@@ -52,12 +60,12 @@
 		<dependency>
 			<groupId>org.jdom</groupId>
 			<artifactId>jdom2</artifactId>
-			<version>2.0.6</version>
+			<version>2.0.6.1</version>  <!-- 2.0.6.1 fixes CVE-2021-33813 (XXE). -->
 		</dependency>
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpclient</artifactId>
-			<version>4.5.4</version>
+			<version>4.5.14</version>  <!-- Last of the 4.5.x line. -->
 		</dependency>
 		<dependency>
 			<groupId>info.picocli</groupId>

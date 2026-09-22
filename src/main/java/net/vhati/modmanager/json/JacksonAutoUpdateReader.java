@@ -76,6 +76,15 @@ public class JacksonAutoUpdateReader {
 		catch ( IOException e ) {
 			exception = e;
 		}
+		catch ( RuntimeException e ) {
+			// A feed that parses but is not shaped as expected -- an empty or
+			// truncated download, or a malformed catalog -- yields nulls from
+			// JsonNode.get() and NPEs partway through. Jackson 2.15+ made this
+			// more reachable: readTree() on empty input returns MissingNode
+			// instead of throwing, so the old JsonProcessingException catch no
+			// longer covers it. Treat any malformed feed as "no data".
+			exception = e;
+		}
 		if ( exception != null ) {
 			log.error( "Failed to parse info about available updates", exception );
 		}
