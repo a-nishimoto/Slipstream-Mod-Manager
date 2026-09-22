@@ -123,9 +123,6 @@
 							<manifest>
 								<mainClass>net.vhati.modmanager.FTLModManager</mainClass>
 							</manifest>
-							<manifestEntries>
-								<Built-By>Vhati</Built-By>
-							</manifestEntries>
 						</archive>
 						<finalName>modman</finalName>
 						<appendAssemblyId>false</appendAssemblyId>

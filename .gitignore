@@ -1,9 +1,20 @@
 target/
+classes/
 
 *.class
 *.tmp
 *.bak
 ~$*
+
+# Local build toolchain and scratch areas. None of these belong in the repo,
+# and deps/ in particular is ~4MB of jars that a stray "git add -A" would commit.
+deps/
+tools/
+testrun/
+modman-log.txt
+
+# Agent worktrees.
+.claude/worktrees/
 
 
 # Windows image file caches
