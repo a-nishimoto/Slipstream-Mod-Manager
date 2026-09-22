@@ -297,16 +297,20 @@ public class ComparableVersion implements Comparable<ComparableVersion> {
 		}
 		if ( numbers.length != oNumbers.length ) return false;
 
+		// Both-null fell through the two guards above and dereferenced null.
+		// compareTo() has always used the three-way form; equals() did not, so
+		// two plain versions like "1.2" and "1.3" threw instead of comparing.
 		if ( suffix == null && other.getSuffix() != null ) return false;
 		if ( suffix != null && other.getSuffix() == null ) return false;
-		if ( !suffix.equals( other.getSuffix() ) ) return false;
+		if ( suffix != null && !suffix.equals( other.getSuffix() ) ) return false;
 
 		if ( comment == null && other.getComment() != null ) return false;
 		if ( comment != null && other.getComment() == null ) return false;
-		if ( !comment.equals( other.getComment() ) ) return false;
+		if ( comment != null && !comment.equals( other.getComment() ) ) return false;
 
 		return true;
 	}
+
 
 	@Override
 	public int hashCode() {

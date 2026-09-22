@@ -393,6 +393,9 @@ public class FTLPack extends AbstractPack {
 			}
 
 			os.write( buf, 0, len );
+			// Never decremented, so this re-read and re-wrote the entry's first
+			// 4096 bytes forever, until the caller's sink or the disk gave out.
+			bytesRemaining -= len;
 		}
 	}
 
