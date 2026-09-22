@@ -267,7 +267,7 @@ public class PkgPack extends AbstractPack {
 
 			if ( c == '\0' ) break;
 			if ( !asciiEncoder.reset().canEncode( c ) ) {
-				throw new IOException( String.format( "Unexpected non-ASCII char in null-terminated string: %X", c ) );
+				throw new IOException( String.format( "Unexpected non-ASCII char in null-terminated string: %04X", (int)c ) );
 			}
 
 			result.append( c );
@@ -353,6 +353,15 @@ public class PkgPack extends AbstractPack {
 		}
 
 		return result;
+	}
+
+	/**
+	 * Returns the absolute file offset where the paths region begins.
+	 *
+	 * PkgEntry.innerPathOffset values are relative to this.
+	 */
+	private long getPathsRegionOffset() {
+		return HEADER_SIZE + (long)entryList.size() * ENTRY_SIZE;
 	}
 
 	private void createIndex( int entryCount ) throws IOException {
@@ -520,8 +529,9 @@ public class PkgPack extends AbstractPack {
 		recycleBigByteBuffer( neededPathsRegionSize );
 		bigByteBuf.limit( neededPathsRegionSize );
 
+		raf.seek( firstGrowthEntryOffset );  // The current paths region begins after the current entries.
 		raf.readFully( bigByteBuf.array(), 0, pathsRegionSize );
-		Arrays.fill( bigByteBuf.array(), pathsRegionSize+1, neededPathsRegionSize, (byte)0 );
+		Arrays.fill( bigByteBuf.array(), pathsRegionSize, neededPathsRegionSize, (byte)0 );
 		bigByteBuf.rewind();  // The backing array was modified directly, so this is a NOP.
 
 		raf.seek( neededPathsRegionOffset );  // Seeking past EOF is okay; write() will grow the file.
@@ -596,7 +606,7 @@ public class PkgPack extends AbstractPack {
 		}
 
 		PkgEntry entry = new PkgEntry();
-		entry.innerPathOffset = 0;  // Write this later.
+		entry.innerPathOffset = innerPathOffset;
 		entry.innerPath = innerPath;
 		entry.innerPathHash = calculatePathHash( innerPath );
 		entry.dataOffset = raf.length();
@@ -633,7 +643,7 @@ public class PkgPack extends AbstractPack {
 		bigByteBuf.limit( innerPath.length() + 1 );
 		writeNullTerminatedString( bigByteBuf, innerPath );
 		bigByteBuf.rewind();
-		raf.seek( innerPathOffset );
+		raf.seek( getPathsRegionOffset() + innerPathOffset );
 		raf.write( bigByteBuf.array(), bigByteBuf.position(), bigByteBuf.limit() );
 
 		entryList.set( entryIndex, entry );
