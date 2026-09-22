@@ -13,6 +13,7 @@ import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -192,41 +193,68 @@ public class ValidateModFileTest {
 	}
 
 
-	// ---- defects, frozen deliberately -------------------------------------
+	// ---- previously frozen defects, now fixed -----------------------------
 
 	/**
-	 * DEFECT (frozen): an XML problem reported on line 1 crashes the validator
-	 * and abandons the rest of the archive.
-	 *
-	 * The message-formatting code slices the source around the reported line and
-	 * underflows for line 1, throwing StringIndexOutOfBoundsException. The user
-	 * gets "An error occurred. See log for details." and no diagnostics at all --
-	 * so the mods most obviously broken produce the least useful report. Putting
-	 * a blank line at the top of the same file makes it report properly.
+	 * An XML problem reported on line 1 used to crash the validator and abandon
+	 * the whole report, so the most obviously broken mods produced the least
+	 * useful output. The line-slicing code started its span at -1, and line 1 has
+	 * no preceding newline to move it forward.
 	 */
 	@Test
-	public void defect_anXmlErrorOnLineOneAbandonsTheWholeReport( @TempDir File tmpDir ) throws Exception {
+	public void anXmlErrorOnLineOneIsReportedProperly( @TempDir File tmpDir ) throws Exception {
 		String out = validateEntries( tmpDir, "line1.ftl",
 			entries( "data/dup.xml.append", "<foo bar='1' bar='2' />\r\n", PAD_PATH, PAD_BODY ) );
 
-		assertTrue( out.contains( "An error occurred" ), out );
-		assertFalse( out.contains( "Strict XML Parser Issues" ),
-			"if this now reports properly, the defect is fixed -- update this test" );
+		assertTrue( out.contains( "Strict XML Parser Issues" ), out );
+		assertTrue( out.contains( "already specified" ), "the real diagnostic should survive: "+ out );
+		assertFalse( out.contains( "An error occurred" ), out );
 	}
 
 	/**
-	 * DEFECT (frozen): an unreadable PNG stops the scan, so later entries are
-	 * never examined and their problems go unreported.
+	 * A malformed image used to leave the shared ZipInputStream unusable, so every
+	 * later entry went unexamined and the failure was reported twice -- once by
+	 * the PNG handler, once by the outer catch as the scan collapsed. PngReader
+	 * now gets a private stream.
 	 */
 	@Test
-	public void defect_aCorruptPngAbandonsTheRestOfTheArchive( @TempDir File tmpDir ) throws Exception {
+	public void aCorruptPngDoesNotStopTheScan( @TempDir File tmpDir ) throws Exception {
 		String out = validateEntries( tmpDir, "png.ftl",
 			entries( "img/bad.png", "not a png at all",
-				"data/lf.txt", "hello\n",          // would otherwise be an ERROR
+				"data/lf.txt", "hello\n",          // must still be reached
 				PAD_PATH, PAD_BODY ) );
 
-		assertTrue( out.contains( "An error occurred" ), out );
-		assertFalse( out.contains( "Non-CR-LF txt crashes FTL" ),
-			"the later entry was scanned after all -- the defect is fixed, update this test" );
+		assertTrue( out.contains( "An error occurred" ), "the bad image is still reported: "+ out );
+		assertEquals( 1, countOccurrences( out, "An error occurred" ),
+			"the failure was reported more than once: "+ out );
+		assertTrue( out.contains( "Non-CR-LF txt crashes FTL" ),
+			"entries after the bad image were skipped: "+ out );
+	}
+
+	/**
+	 * The fallback parser is only consulted when strict parsing fails, so
+	 * validating with it otherwise reported on a path that would never run for
+	 * that file. A valid mod using xml:space used to be told "Sloppy XML Parser
+	 * Issues: An error occurred" and "No Problems" at the same time.
+	 */
+	@Test
+	public void aValidModIsNotAlsoReportedAsBroken( @TempDir File tmpDir ) throws Exception {
+		String out = validateEntries( tmpDir, "xmlspace.ftl",
+			entries( "data/events.xml.append", "<text xml:space=\"preserve\">hi</text>\r\n" ) );
+
+		assertTrue( out.contains( "No Problems" ), out );
+		assertFalse( out.contains( "Sloppy XML Parser Issues" ),
+			"the fallback parser was consulted although strict parsing succeeded: "+ out );
+		assertFalse( out.contains( "An error occurred" ), out );
+	}
+
+
+	private static int countOccurrences( String haystack, String needle ) {
+		int count = 0, idx = 0;
+		while ( (idx = haystack.indexOf( needle, idx )) != -1 ) {
+			count++;
+			idx += needle.length();
+		}
+		return count;
 	}
 }

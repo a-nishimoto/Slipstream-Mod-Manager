@@ -444,6 +444,22 @@ public class ModUtilities {
 	 *
 	 * @param modFile an *.ftl file to check
 	 */
+	/**
+	 * Reads the current zip entry fully into memory.
+	 *
+	 * Text entries are already slurped whole by decodeText, so this is no new
+	 * exposure; it exists so a parser that chokes cannot damage the shared
+	 * ZipInputStream for the entries that follow.
+	 */
+	private static byte[] readEntryBytes( InputStream is ) throws IOException {
+		ByteArrayOutputStream buf = new ByteArrayOutputStream();
+		byte[] chunk = new byte[4096];
+		int len;
+		while ( (len = is.read( chunk )) >= 0 ) buf.write( chunk, 0, len );
+		return buf.toByteArray();
+	}
+
+
 	public static Report validateModFile( File modFile ) {
 
 		List<ReportMessage> messages = new ArrayList<ReportMessage>();
@@ -522,8 +538,15 @@ public class ModUtilities {
 					) );
 				}
 				else if ( innerPath.matches( "^.*[.]png$" ) ) {
+					PngReader pngr = null;
 					try {
-						PngReader pngr = new PngReader( zis );
+						// Read the entry out first and hand PngReader a private
+						// stream. Given the shared ZipInputStream directly, a
+						// malformed image left it unusable, so every LATER entry
+						// in the archive went unexamined and the failure was
+						// reported twice -- once here, once by the outer catch
+						// when the scan collapsed.
+						pngr = new PngReader( new ByteArrayInputStream( readEntryBytes( zis ) ) );
 
 						if ( pngr.interlaced ) {
 							pendingMsgs.add( new ReportMessage(
@@ -560,6 +583,13 @@ public class ModUtilities {
 							"An error occurred. See log for details."
 						) );
 						modValid = false;
+					}
+					finally {
+						// PngReader was never closed, leaking reader state per image.
+						if ( pngr != null ) {
+							try {pngr.close();}
+							catch ( Exception e ) {}
+						}
 					}
 				}
 				else if ( innerPath.matches( "^.*[.]ttf$" ) ) {
@@ -728,17 +758,26 @@ public class ModUtilities {
 						if ( xmlReport.outcome == false )
 							modValid = false;
 
-						Report sloppyReport = validateSloppyModXML( decodeResult.text );
+						// Only meaningful when strict parsing failed.
+						// parseStrictOrSloppyXML reaches for the sloppy parser only
+						// as a fallback, so running it against a file the strict
+						// parser handled reports on a path that will never execute
+						// for that file -- which is how a valid mod could be told
+						// "Sloppy XML Parser Issues: An error occurred" and
+						// "No Problems" in the same breath.
+						if ( xmlReport.outcome == false ) {
+							Report sloppyReport = validateSloppyModXML( decodeResult.text );
 
-						if ( sloppyReport.messages.size() > 0 ) {
-							pendingMsgs.add( new ReportMessage(
-								ReportMessage.ERROR_SUBSECTION,
-								"Sloppy XML Parser Issues:",
-								sloppyReport.messages
-							) );
+							if ( sloppyReport.messages.size() > 0 ) {
+								pendingMsgs.add( new ReportMessage(
+									ReportMessage.ERROR_SUBSECTION,
+									"Sloppy XML Parser Issues:",
+									sloppyReport.messages
+								) );
+							}
+							if ( sloppyReport.outcome == false )
+								modValid = false;
 						}
-						if ( sloppyReport.outcome == false )
-							modValid = false;
 					}
 				}
 
@@ -1047,7 +1086,10 @@ public class ModUtilities {
 		catch ( JDOMParseException e ) {
 			int lineNum = e.getLineNumber();
 			if ( lineNum != -1 ) {
-				int badStart = -1;
+				// Line 1 has no preceding newline, so the "i == lineNum-1" branch
+				// below never fires for it. Starting at 0 means the slice covers
+				// the buffer from the beginning, instead of underflowing.
+				int badStart = 0;
 				int badEnd = -1;
 				String badLine = "???";
 				m = Pattern.compile( "\n|\\z" ).matcher( srcBuf );
@@ -1056,7 +1098,7 @@ public class ModUtilities {
 						badStart = m.end();
 					} else if ( i == lineNum ) {
 						badEnd = m.start();
-						badLine = srcBuf.substring( badStart, badEnd );
+						if ( badStart <= badEnd ) badLine = srcBuf.substring( badStart, badEnd );
 					}
 				}
 				String msg = String.format( "Fix this and try again:\n%s", e.toString() );
@@ -1110,7 +1152,10 @@ public class ModUtilities {
 		catch ( JDOMParseException e ) {
 			int lineNum = e.getLineNumber();
 			if ( lineNum != -1 ) {
-				int badStart = -1;
+				// Line 1 has no preceding newline, so the "i == lineNum-1" branch
+				// below never fires for it. Starting at 0 means the slice covers
+				// the buffer from the beginning, instead of underflowing.
+				int badStart = 0;
 				int badEnd = -1;
 				String badLine = "???";
 				Matcher m = Pattern.compile( "\n|\\z" ).matcher( text );
@@ -1120,7 +1165,7 @@ public class ModUtilities {
 					}
 					else if ( i == lineNum ) {
 						badEnd = m.start();
-						badLine = text.substring( badStart, badEnd );
+						if ( badStart <= badEnd ) badLine = text.substring( badStart, badEnd );
 					}
 				}
 				String msg = String.format( "Fix this and try again:\n%s", e.toString() );
@@ -1148,6 +1193,11 @@ public class ModUtilities {
 				ReportMessage.EXCEPTION,
 				"An error occurred. See log for details."
 			) );
+			// This only runs once strict parsing has already failed, so if the
+			// fallback also gives up, neither path can read the file and patching
+			// would fail too. Reporting it invalid is correct. The sibling
+			// validateModXML has always done this; only this one forgot.
+			xmlValid = false;
 		}
 
 		return new Report( messages, xmlValid );
