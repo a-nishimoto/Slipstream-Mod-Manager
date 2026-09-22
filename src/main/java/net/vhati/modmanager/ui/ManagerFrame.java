@@ -56,6 +56,7 @@ import javax.swing.event.ListSelectionListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.vhati.modmanager.core.DatBackupManager;
 import net.vhati.modmanager.core.AutoUpdateInfo;
 import net.vhati.modmanager.core.ComparableVersion;
 import net.vhati.modmanager.core.FTLUtilities;
@@ -81,6 +82,7 @@ import net.vhati.modmanager.ui.Statusbar;
 import net.vhati.modmanager.ui.StatusbarMouseListener;
 import net.vhati.modmanager.ui.table.ChecklistTablePanel;
 import net.vhati.modmanager.ui.table.ListState;
+import net.vhati.util.AtomicFileOutput;
 
 
 public class ManagerFrame extends JFrame implements ActionListener, ModsScanObserver, Nerfable, Statusbar, Thread.UncaughtExceptionHandler {
@@ -482,23 +484,23 @@ public class ManagerFrame extends JFrame implements ActionListener, ModsScanObse
 
 
 	private void saveModsTableState( ListState<ModFileInfo> tableState ) {
-		BufferedWriter bw = null;
+		AtomicFileOutput out = null;
 		try {
-			FileOutputStream os = new FileOutputStream( modsTableStateFile );
-			bw = new BufferedWriter(new OutputStreamWriter( os, Charset.forName( "UTF-8" ) ));
+			out = new AtomicFileOutput( modsTableStateFile );
+			BufferedWriter bw = new BufferedWriter( out.getWriter( "UTF-8" ) );
 
 			for ( ModFileInfo modFileInfo : tableState.getItems() ) {
 				bw.write( modFileInfo.getFile().getName() );
 				bw.write( "\r\n" );
 			}
 			bw.flush();
+			out.commit();
 		}
 		catch ( IOException e ) {
 			log.error( String.format( "Error writing \"%s\"", modsTableStateFile.getName() ), e );
 		}
 		finally {
-			try {if ( bw != null ) bw.close();}
-			catch (Exception e) {}
+			if ( out != null ) out.close();
 		}
 	}
 
@@ -851,14 +853,20 @@ public class ManagerFrame extends JFrame implements ActionListener, ModsScanObse
 		else if ( source == deleteBackupsMenuItem ) {
 			String deletePrompt = ""
 				+ "Slipstream uses backups to revert FTL to a state without mods.\n"
-				+ "You are about to delete them.\n"
+				+ "You are about to delete them, along with their checksum list.\n"
 				+ "\n"
-				+ "The next time you click 'patch', Slipstream will create fresh backups.\n"
+				+ "The next time you click 'patch', Slipstream will treat FTL's current\n"
+				+ ".dat files as the new unmodded baseline and back them up as-is.\n"
 				+ "\n"
-				+ "FTL *must be* in a working unmodded state *before* you click 'patch'.\n"
+				+ "So FTL *must be* in a working unmodded state *before* you click 'patch'.\n"
+				+ "If it is not, the modded files become the permanent 'vanilla' copy and\n"
+				+ "there is no way back except reinstalling.\n"
 				+ "\n"
-				+ "To get FTL into a working unmodded state, you may need to reinstall FTL\n"
-				+ "or use Steam's \"Verify integrity of game files\" feature.\n"
+				+ "If you have not reverted yet, cancel this, uncheck every mod, and click\n"
+				+ "'patch' once. That restores vanilla. Then come back here.\n"
+				+ "\n"
+				+ "Otherwise, reinstall FTL or use Steam's \"Verify integrity of game\n"
+				+ "files\" feature first.\n"
 				+ "\n"
 				+ "Whenever FTL is updated, you will need to delete stale backups or the\n"
 				+ "game will break.\n"
@@ -868,19 +876,22 @@ public class ManagerFrame extends JFrame implements ActionListener, ModsScanObse
 			int response = JOptionPane.showConfirmDialog( ManagerFrame.this, deletePrompt, "Continue?", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE );
 			if ( response == JOptionPane.YES_OPTION ) {
 
-				List<String> failures = new ArrayList<String>( 2 );
 				boolean backupsExist = false;
 				for ( String datName : new String[] {"ftl.dat", "data.dat", "resource.dat"} ) {
-					File bakFile = new File( backupDir, datName +".bak" );
-					if ( bakFile.exists() ) {
-						backupsExist = true;
-
-						if ( !bakFile.delete() ) {
-							log.error( "Unable to delete backup: "+ bakFile.getName() );
-							failures.add( bakFile.getName() );
-						}
-					}
+					if ( new File( backupDir, datName +".bak" ).exists() ) backupsExist = true;
 				}
+
+				List<String> failures;
+				try {
+					File datsDir = new File( appConfig.getProperty( SlipstreamConfig.FTL_DATS_PATH, "" ) );
+					failures = new DatBackupManager( datsDir, backupDir ).deleteBackups();
+				}
+				catch ( IOException ex ) {
+					log.error( "Error deleting backups", ex );
+					failures = new ArrayList<String>();
+					failures.add( ex.getMessage() );
+				}
+
 				if ( !backupsExist ) {
 					JOptionPane.showMessageDialog( ManagerFrame.this, "There were no backups to delete.", "Nothing to do", JOptionPane.INFORMATION_MESSAGE );
 				}

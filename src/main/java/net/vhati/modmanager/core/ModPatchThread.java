@@ -110,8 +110,6 @@ public class ModPatchThread extends Thread {
 		PackContainer packContainer = null;
 
 		try {
-			int backupsCreated = 0;
-			int datsClobbered = 0;
 			int modsInstalled = 0;
 			int datsRepacked = 0;
 
@@ -119,51 +117,71 @@ public class ModPatchThread extends Thread {
 			File dataDatFile = new File( datsDir, "data.dat" );
 			File resourceDatFile = new File( datsDir, "resource.dat" );
 
-			List<BackedUpDat> backedUpDats = new ArrayList<BackedUpDat>( 2 );
-			for ( File datFile : new File[] {ftlDatFile, dataDatFile, resourceDatFile} ) {
-				if ( !datFile.exists() ) continue;
-
-				BackedUpDat bud = new BackedUpDat();
-				bud.datFile = datFile;
-				bud.bakFile = new File( backupDir, datFile.getName() +".bak" );
-				backedUpDats.add( bud );
-			}
+			DatBackupManager backupManager = new DatBackupManager( datsDir, backupDir );
+			List<DatBackupManager.BackedUpDat> backedUpDats = backupManager.getDats();
 
 			// Don't let dats be read-only.
-			for ( BackedUpDat bud : backedUpDats ) {
+			for ( DatBackupManager.BackedUpDat bud : backedUpDats ) {
 				if ( bud.datFile.exists() ) bud.datFile.setWritable( true );
 			}
 
-			// Create backup dats, if necessary.
-			for ( BackedUpDat bud : backedUpDats ) {
-				if ( !bud.bakFile.exists() ) {
-					log.info( String.format( "Backing up \"%s\".", bud.datFile.getName() ) );
-					observer.patchingStatus( String.format( "Backing up \"%s\".", bud.datFile.getName() ) );
+			final int backupSteps = Math.max( 1, backedUpDats.size() );
+			final int backupMilestone = progMilestone;
 
-					PackUtilities.copyFile( bud.datFile, bud.bakFile );
-					backupsCreated++;
-					observer.patchingProgress( progMilestone + progBackupMax/backedUpDats.size()*backupsCreated, progMax );
-
-					if ( !keepRunning ) return false;
+			DatBackupManager.ProgressListener backupProgress = new DatBackupManager.ProgressListener() {
+				@Override
+				public void backupStatus( String message ) {
+					observer.patchingStatus( message );
 				}
+				@Override
+				public void backupProgress( int done, int total ) {
+					observer.patchingProgress( backupMilestone + progBackupMax/backupSteps*done, progMax );
+				}
+			};
+			DatBackupManager.CancelCheck backupCancel = new DatBackupManager.CancelCheck() {
+				@Override
+				public boolean shouldContinue() {
+					return keepRunning;
+				}
+			};
+
+			// Creates the vanilla backups on first run, or verifies the existing
+			// set against its recorded hashes. Refuses to proceed if the set is
+			// partial or altered, rather than re-backing-up dats that may already
+			// be modded -- see DatBackupManager.
+			boolean restoreNeeded;
+			try {
+				restoreNeeded = backupManager.prepareBackups( backupProgress, backupCancel );
 			}
+			catch ( DatBackupManager.BackupCancelledException e ) {
+				return false;
+			}
+
 			progMilestone += progBackupMax;
 			observer.patchingProgress( progMilestone, progMax );
 			observer.patchingStatus( null );
 
-			if ( backupsCreated != backedUpDats.size() ) {
+			if ( restoreNeeded ) {
 				// Clobber current dat files with their respective backups.
 				// But don't bother if we made those backups just now.
+				final int clobberMilestone = progMilestone;
 
-				for ( BackedUpDat bud : backedUpDats ) {
-					log.info( String.format( "Restoring vanilla \"%s\"...", bud.datFile.getName() ) );
-					observer.patchingStatus( String.format( "Restoring vanilla \"%s\"...", bud.datFile.getName() ) );
+				DatBackupManager.ProgressListener clobberProgress = new DatBackupManager.ProgressListener() {
+					@Override
+					public void backupStatus( String message ) {
+						observer.patchingStatus( message );
+					}
+					@Override
+					public void backupProgress( int done, int total ) {
+						observer.patchingProgress( clobberMilestone + progClobberMax/backupSteps*done, progMax );
+					}
+				};
 
-					PackUtilities.copyFile( bud.bakFile, bud.datFile );
-					datsClobbered++;
-					observer.patchingProgress( progMilestone + progClobberMax/backedUpDats.size()*datsClobbered, progMax );
-
-					if ( !keepRunning ) return false;
+				try {
+					backupManager.restoreVanilla( clobberProgress, backupCancel );
+				}
+				catch ( DatBackupManager.BackupCancelledException e ) {
+					return false;
 				}
 				observer.patchingStatus( null );
 			}
@@ -475,10 +493,4 @@ public class ModPatchThread extends Thread {
 		return innerPath;
 	}
 
-
-
-	public static class BackedUpDat {
-		public File datFile = null;
-		public File bakFile = null;
-	}
 }
