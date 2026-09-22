@@ -263,6 +263,15 @@ public class ModUtilities {
 	 * @see net.vhati.modmanager.core.SloppyXMLOutputProcessor
 	 */
 	public static InputStream patchXMLFile( InputStream mainStream, InputStream appendStream, String encoding, boolean globalPanic, String mainDescription, String appendDescription ) throws IOException, JDOMException {
+		return patchXMLFile( mainStream, appendStream, encoding, globalPanic, mainDescription, appendDescription, null );
+	}
+
+	/**
+	 * As above, reporting non-fatal patch problems to a listener.
+	 *
+	 * @param warningListener may be null
+	 */
+	public static InputStream patchXMLFile( InputStream mainStream, InputStream appendStream, String encoding, boolean globalPanic, String mainDescription, String appendDescription, PatchWarningListener warningListener ) throws IOException, JDOMException {
 		// XML declaration, or root FTL tags.
 		Pattern comboPtn = Pattern.compile( "(<[?]xml [^>]*?[?]>\n*)|(</?FTL>)" );
 		Matcher m = null;
@@ -303,6 +312,7 @@ public class ModUtilities {
 
 		XMLPatcher patcher = new XMLPatcher();
 		patcher.setGlobalPanic( globalPanic );
+		patcher.setWarningListener( warningListener );
 		Document mergedDoc = patcher.patch( mainDoc, appendDoc );
 		mainDoc = null;
 		appendDoc = null;

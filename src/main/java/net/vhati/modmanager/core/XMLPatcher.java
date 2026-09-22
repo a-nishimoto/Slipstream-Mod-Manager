@@ -29,6 +29,9 @@ import org.jdom2.filter.Filter;
 import org.jdom2.input.JDOMParseException;
 import org.jdom2.input.SAXBuilder;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 /**
  * Programmatically edits existing XML with instructions from another XML doc.
@@ -36,7 +39,10 @@ import org.jdom2.input.SAXBuilder;
  */
 public class XMLPatcher {
 
+	private static final Logger log = LoggerFactory.getLogger( XMLPatcher.class );
+
 	protected boolean globalPanic = false;
+	protected PatchWarningListener warningListener = null;
 	protected Namespace modNS;
 	protected Namespace modAppendNS;
 	protected Namespace modOverwriteNS;
@@ -47,6 +53,26 @@ public class XMLPatcher {
 		modAppendNS = Namespace.getNamespace( "mod-append", "mod-append" );
 		modOverwriteNS = Namespace.getNamespace( "mod-overwrite", "mod-overwrite" );
 	}
+
+	/**
+	 * Sets a listener for non-fatal problems noticed while patching.
+	 */
+	public void setWarningListener( PatchWarningListener l ) {
+		this.warningListener = l;
+	}
+
+	protected void warn( String message ) {
+		if ( warningListener != null ) {
+			// The listener owns reporting from here -- it adds the mod and file
+			// context and logs the fuller message itself. Logging here too
+			// would print every warning twice.
+			warningListener.patchWarning( message );
+		}
+		else {
+			log.warn( message );
+		}
+	}
+
 
 	public void setGlobalPanic( boolean b ) {
 		globalPanic = b;
@@ -67,6 +93,17 @@ public class XMLPatcher {
 				List<Element> matchedNodes = handleModFind( resultRoot, node );
 				if ( matchedNodes != null ) {
 					handled = true;
+
+					// A mod's outermost <find...> matching nothing means the
+					// whole block did nothing. Nested finds may legitimately
+					// come up empty, and panic="true" exists to turn that into
+					// an error, but silence at the top level is the most common
+					// way a mod "does nothing" with no explanation.
+					if ( matchedNodes.isEmpty() ) {
+						warn( String.format( "<%s> matched nothing, so none of its commands ran (%s).",
+							node.getName(), getPathToRoot( node ) ) );
+					}
+
 					for ( Element matchedNode : matchedNodes ) {
 						handleModCommands( matchedNode, node );
 					}
@@ -310,6 +347,8 @@ public class XMLPatcher {
 				boolean isOr = parOp.equals( "OR" );
 
 				Set<Element> candidateSet = new HashSet<Element>();
+				boolean firstCriteria = true;
+
 				for ( Element criteriaNode : node.getChildren() ) {
 					List<Element> candidates;
 					if ( criteriaNode.getName().equals( "par" ) && criteriaNode.getNamespace().equals( modNS ) ) {
@@ -320,10 +359,20 @@ public class XMLPatcher {
 							throw new IllegalArgumentException( String.format( "Invalid <par> search criteria <%s> (%s). Must be a <find...> or <par>.", criteriaNode.getName(), getPathToRoot( criteriaNode ) ) );
 					}
 
-					if ( isOr || candidateSet.isEmpty() ) {
+					// The seed must be tracked explicitly. Using "the set is
+					// still empty" to mean "this is the first criterion" made an
+					// AND whose intersection had emptied start over from the
+					// next criterion, so <par op="AND"> could return nodes that
+					// matched only the last one -- the documented behavior is a
+					// plain intersection.
+					if ( firstCriteria ) {
+						candidateSet.addAll( candidates );
+						firstCriteria = false;
+					}
+					else if ( isOr ) {
 						candidateSet.addAll( candidates );
 					}
-					else if ( isAnd ) {
+					else {  // isAnd
 						candidateSet.retainAll( candidates );
 					}
 				}
@@ -387,6 +436,18 @@ public class XMLPatcher {
 				}
 				else if ( cmdNode.getName().equals( "setValue" ) ) {
 					handled = true;
+
+					// JDOM's setText() replaces ALL content, so any child
+					// elements under the context tag are destroyed. That is
+					// surprising for something documented as setting a text
+					// value, and it is silent. Keep the behavior -- mods have
+					// been written against it -- but say so.
+					int doomedChildren = contextNode.getChildren().size();
+					if ( doomedChildren > 0 ) {
+						warn( String.format( "<mod:setValue> discarded %d child tag(s) under %s.",
+							doomedChildren, getPathToRoot( contextNode ) ) );
+					}
+
 					contextNode.setText( cmdNode.getTextTrim() );
 				}
 				else if ( cmdNode.getName().equals( "removeTag" ) ) {
