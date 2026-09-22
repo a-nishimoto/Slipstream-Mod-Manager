@@ -16,11 +16,11 @@ import org.jdom2.Content;
 import org.jdom2.DefaultJDOMFactory;
 import org.jdom2.Document;
 import org.jdom2.Element;
-import org.jdom2.IllegalAddException;
 import org.jdom2.JDOMFactory;
 import org.jdom2.Namespace;
 import org.jdom2.Parent;
 import org.jdom2.Text;
+import org.jdom2.Verifier;
 import org.jdom2.input.JDOMParseException;
 
 
@@ -103,6 +103,60 @@ public class SloppyXMLParser {
 		entityMap.put( "amp", "&" );
 		entityMap.put( "apos", "'" );
 		entityMap.put( "quot", "\"" );
+	}
+
+
+	/**
+	 * Returns a placeholder Namespace for a prefix whose URI is unknown.
+	 *
+	 * The prefix is reused as the URI -- good enough for a salvage parser, which
+	 * only needs prefixed names to survive round trips. "xml" is the exception:
+	 * it is reserved, and JDOM refuses to bind it to anything but the W3C URI, so
+	 * xml:space and xml:lang (ordinary, valid XML) used to throw
+	 * IllegalNameException out of the middle of parsing.
+	 */
+	private static Namespace sloppyNamespace( String prefix ) {
+		if ( "xml".equals( prefix ) ) return Namespace.XML_NAMESPACE;
+		return Namespace.getNamespace( prefix, prefix );
+	}
+
+	/**
+	 * Declares a namespace on a node, unless it is one that must not be declared.
+	 *
+	 * The "xml" prefix is bound implicitly in every document; declaring it is
+	 * itself an error, so binding it here would only move the exception.
+	 */
+	private void declareNamespace( Element node, Namespace ns ) {
+		if ( Namespace.XML_NAMESPACE.equals( ns ) ) return;
+		factory.addNamespaceDeclaration( node, ns );
+	}
+
+	/**
+	 * Resolves a numeric character reference, or returns it verbatim.
+	 *
+	 * Anything that cannot become a legal XML character is passed through as
+	 * literal text, the same way an unknown named entity is. That keeps this a
+	 * salvage parser: the author sees what they wrote, the "&" is escaped on
+	 * output, and nothing throws. It used to cast to (char), silently truncating
+	 * astral codepoints -- &#x1F600; became U+F600, a Private Use character.
+	 */
+	private static String charRefToString( String digits, int radix ) {
+		int codePoint;
+		try {
+			codePoint = Integer.parseInt( digits, radix );
+		}
+		catch ( NumberFormatException e ) {
+			return literalCharRef( digits, radix );  // Too large to be a number at all.
+		}
+
+		if ( !Character.isValidCodePoint( codePoint ) ) return literalCharRef( digits, radix );
+		if ( !Verifier.isXMLCharacter( codePoint ) ) return literalCharRef( digits, radix );
+
+		return Character.toString( codePoint );
+	}
+
+	private static String literalCharRef( String digits, int radix ) {
+		return ( radix == 16 ? "&#x" : "&#" ) + digits + ";";
 	}
 
 
@@ -205,8 +259,8 @@ public class SloppyXMLParser {
 
 						Element tagNode;
 						if ( nodePrefix != null ) {
-							Namespace nodeNS = Namespace.getNamespace( nodePrefix, nodePrefix );  // URI? *shrug*
-							factory.addNamespaceDeclaration( rootNode, nodeNS );
+							Namespace nodeNS = sloppyNamespace( nodePrefix );
+							declareNamespace( rootNode, nodeNS );
 							tagNode = factory.element( lastLineAndCol[0]+1, lastLineAndCol[1]+1+1, nodeName, nodeNS );
 						} else {
 							tagNode = factory.element( lastLineAndCol[0]+1, lastLineAndCol[1]+1+1, nodeName );
@@ -225,12 +279,12 @@ public class SloppyXMLParser {
 									if ( attrPrefix.equals( "xmlns" ) ) {
 										// This is a pseudo attribute declaring a namespace prefix.
 										// Move it to the root node.
-										Namespace attrNS = Namespace.getNamespace( attrName, attrName );  // URI? *shrug*
-										factory.addNamespaceDeclaration( rootNode, attrNS );
+										Namespace attrNS = sloppyNamespace( attrName );
+										declareNamespace( rootNode, attrNS );
 									}
 									else {
-										Namespace attrNS = Namespace.getNamespace( attrPrefix, attrPrefix );  // URI? *shrug*
-										factory.addNamespaceDeclaration( rootNode, attrNS );
+										Namespace attrNS = sloppyNamespace( attrPrefix );
+										declareNamespace( rootNode, attrNS );
 										Attribute attrObj = factory.attribute( attrName, attrValue, AttributeType.UNDECLARED, attrNS );
 										factory.setAttribute( tagNode, attrObj );
 									}
@@ -314,7 +368,12 @@ public class SloppyXMLParser {
 			}
 
 		}
-		catch( IllegalAddException e ) {
+		catch( IllegalArgumentException e ) {
+			// Every JDOM Illegal*Exception (Add / Data / Name) extends
+			// IllegalArgumentException, as does NumberFormatException. They were
+			// escaping build(), whose signature promises only JDOMParseException,
+			// and ModUtilities.parseStrictOrSloppyXML catches only that -- so a
+			// single bad character reference took down mod parsing entirely.
 			int nonspacePos = findNextNonspace( s, pos );
 			int errorPos = ( (nonspacePos != -1) ? nonspacePos : pos );
 
@@ -345,7 +404,6 @@ public class SloppyXMLParser {
 		Matcher m = entityPtn.matcher( s );
 		String decRef;
 		String hexRef;
-		int charCode;
 		String entName;
 		String entity;
 
@@ -355,13 +413,11 @@ public class SloppyXMLParser {
 			entName = m.group( 3 );
 			if ( (decRef != null) ) {
 				// Decimal character reference.
-				charCode = Integer.parseInt( decRef );
-				entity = Character.toString( (char)charCode );
+				entity = charRefToString( decRef, 10 );
 			}
 			else if ( (hexRef != null) ) {
 				// Hex character reference.
-				charCode = Integer.parseInt( hexRef, 16 );
-				entity = Character.toString( (char)charCode );
+				entity = charRefToString( hexRef, 16 );
 			}
 			else {
 				entity = entityMap.get( entName );
@@ -370,7 +426,7 @@ public class SloppyXMLParser {
 					entity = "&"+ entName +";";
 				}
 			}
-			m.appendReplacement( buf, entity );
+			m.appendReplacement( buf, Matcher.quoteReplacement( entity ) );
 		}
 		m.appendTail( buf );
 

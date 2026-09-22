@@ -5,12 +5,16 @@ import java.util.List;
 import org.jdom2.Content;
 import org.jdom2.Document;
 import org.jdom2.Element;
+import org.jdom2.Namespace;
 import org.jdom2.Text;
 import org.jdom2.input.JDOMParseException;
+import org.jdom2.output.Format;
+import org.jdom2.output.XMLOutputter;
 
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -115,52 +119,93 @@ public class SloppyXMLParserTest {
 	}
 
 
-	// ---- defects, frozen deliberately -------------------------------------
+	// ---- previously frozen defects, now fixed -----------------------------
 
 	/**
-	 * DEFECT (frozen): character references above U+FFFF are truncated by a
-	 * (char) narrowing cast, silently producing a different character.
-	 *
-	 * U+1F600 becomes U+F600, a Private Use codepoint. There is no warning, and
-	 * the mod author sees mojibake in-game. The fix is Character.toChars(); this
-	 * test exists so making it is a visible decision.
+	 * Character references above U+FFFF used to be truncated by a (char)
+	 * narrowing cast: &#x1F600; silently became U+F600, a Private Use
+	 * codepoint, and the author saw mojibake in-game with no warning.
 	 */
 	@Test
-	public void defect_astralCharacterReferencesAreSilentlyTruncated() throws Exception {
-		assertEquals( "", textOf( "<a>&#x1F600;</a>" ), "expected the truncated U+F600" );
-		assertEquals( "ǐ", textOf( "<a>&#66000;</a>" ) );
+	public void astralCharacterReferencesSurviveIntact() throws Exception {
+		assertEquals( 0x1F600, textOf( "<a>&#x1F600;</a>" ).codePointAt( 0 ), "hex form" );
+		assertEquals( 0x1F600, textOf( "<a>&#128512;</a>" ).codePointAt( 0 ), "decimal form" );
 
-		// Below U+FFFF is handled correctly.
-		assertEquals( "☺", textOf( "<a>&#x263A;</a>" ) );
+		// Below U+FFFF is unchanged.
+		assertEquals( "\u263A", textOf( "<a>&#x263A;</a>" ) );
 		assertEquals( "AA", textOf( "<a>&#65;&#x41;</a>" ) );
 	}
 
 	/**
-	 * DEFECT (frozen): build() declares "throws JDOMParseException", but some
-	 * inputs escape as unchecked JDOM exceptions instead.
+	 * A reference that cannot become a legal XML character is passed through as
+	 * literal text, the way an unknown named entity already was.
 	 *
-	 * ModUtilities.parseStrictOrSloppyXML only catches JDOMParseException around
-	 * the sloppy build, so these propagate out of mod parsing entirely rather
-	 * than being reported as a bad mod file.
+	 * &#0; is a valid codepoint but illegal in XML, and it used to reach JDOM and
+	 * throw. Salvaging the text instead keeps the mod usable and shows the author
+	 * exactly what they wrote; the ampersand is escaped on output.
 	 */
 	@Test
-	public void defect_someInputsEscapeAsUncheckedExceptions() {
-		Throwable nul = assertThrows( Throwable.class, () -> parse( "<a>&#0;</a>" ) );
-		assertEquals( "org.jdom2.IllegalDataException", nul.getClass().getName() );
-		assertTrue( nul instanceof RuntimeException, "unchecked, so callers cannot catch it by contract" );
-
-		// xml:space="preserve" is valid, common XML that trips the same hole.
-		Throwable xmlns = assertThrows( Throwable.class, () -> parse( "<a xml:space=\"preserve\">x</a>" ) );
-		assertEquals( "org.jdom2.IllegalNameException", xmlns.getClass().getName() );
-		assertTrue( xmlns instanceof RuntimeException );
+	public void unrepresentableCharacterReferencesAreKeptAsLiteralText() throws Exception {
+		assertEquals( "&#0;", textOf( "<a>&#0;</a>" ), "illegal in XML" );
+		assertEquals( "&#99999999999;", textOf( "<a>&#99999999999;</a>" ), "overflows an int" );
+		assertEquals( "&#xFFFFFFF;", textOf( "<a>&#xFFFFFFF;</a>" ), "not a valid codepoint" );
 	}
 
-	/** And the same escape happens through the real entry point mods go via. */
+	/**
+	 * The reserved "xml" prefix is bound implicitly in every document, and JDOM
+	 * refuses to bind it to anything else. Building a placeholder namespace from
+	 * it threw IllegalNameException out of the middle of parsing.
+	 *
+	 * This was not cosmetic: a mod that was both malformed (so strict parsing
+	 * failed and this parser ran) and used xml:space aborted the whole patch run.
+	 */
 	@Test
-	public void defect_uncheckedExceptionsEscapeParseStrictOrSloppyXML() {
-		Throwable t = assertThrows( Throwable.class,
-			() -> ModUtilities.parseStrictOrSloppyXML( "<a>&#0;</a>", "test" ) );
-		assertTrue( t instanceof RuntimeException,
-			"escaped as "+ t.getClass().getName() +", which callers do not expect" );
+	public void theReservedXmlPrefixIsAccepted() throws Exception {
+		assertEquals( "preserve",
+			parse( "<a xml:space=\"preserve\">x</a>" ).getRootElement()
+				.getAttributeValue( "space", Namespace.XML_NAMESPACE ) );
+		assertEquals( "en",
+			parse( "<a xml:lang=\"en\">x</a>" ).getRootElement()
+				.getAttributeValue( "lang", Namespace.XML_NAMESPACE ) );
+
+		// xml:-prefixed element names too.
+		assertEquals( "foo", parse( "<xml:foo>x</xml:foo>" ).getRootElement().getName() );
+	}
+
+	/**
+	 * Declaring xmlns:xml is itself illegal, so the fix must not emit one --
+	 * otherwise it would only move the exception to serialization time.
+	 */
+	@Test
+	public void theXmlPrefixIsNotRedeclaredOnOutput() throws Exception {
+		String out = new XMLOutputter( Format.getCompactFormat() )
+			.outputString( parse( "<a xml:space=\"preserve\">x</a>" ).getRootElement() );
+
+		assertTrue( out.contains( "xml:space=\"preserve\"" ), out );
+		assertFalse( out.contains( "xmlns:xml" ), "an illegal xmlns:xml declaration was emitted: "+ out );
+
+		// An ordinary prefix still gets its placeholder declaration.
+		String other = new XMLOutputter( Format.getCompactFormat() )
+			.outputString( parse( "<a mod:z=\"1\">x</a>" ).getRootElement() );
+		assertTrue( other.contains( "xmlns:mod" ), other );
+	}
+
+	/**
+	 * build() declares "throws JDOMParseException". It now keeps that promise:
+	 * JDOM's Illegal*Exception family and NumberFormatException all extend
+	 * IllegalArgumentException and are wrapped, so callers such as
+	 * ModUtilities.parseStrictOrSloppyXML -- which catches only
+	 * JDOMParseException -- can actually handle a bad file.
+	 */
+	@Test
+	public void unparseableInputRaisesACheckedJDOMParseException() {
+		assertThrows( JDOMParseException.class, () -> parse( "<a><b>text" ) );
+	}
+
+	@Test
+	public void previouslyUncatchableInputsNoLongerEscapeParsing() throws Exception {
+		// Both of these used to escape as unchecked JDOM exceptions.
+		ModUtilities.parseStrictOrSloppyXML( "<a>&#0;</a>", "test" );
+		ModUtilities.parseStrictOrSloppyXML( "<a xml:space=\"preserve\">x</a>", "test" );
 	}
 }
