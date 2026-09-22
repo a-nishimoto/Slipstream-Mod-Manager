@@ -15,6 +15,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import net.vhati.modmanager.core.ModsInfo;
+import com.fasterxml.jackson.core.JsonGenerator;
+import net.vhati.util.AtomicFileOutput;
 
 
 public class JacksonCatalogWriter {
@@ -57,15 +59,19 @@ public class JacksonCatalogWriter {
 			}
 		}
 
-		OutputStream os = null;
+		AtomicFileOutput out = null;
 		try {
-			os = new FileOutputStream( dstFile );
-			OutputStreamWriter writer = new OutputStreamWriter( os, Charset.forName( "US-ASCII" ) );
-			mapper.writeValue( writer, rootNode );
+			out = new AtomicFileOutput( dstFile );
+
+			// Jackson closes its target by default, which would shut the staged
+			// stream before commit() can flush and rename it.
+			mapper.getFactory().disable( JsonGenerator.Feature.AUTO_CLOSE_TARGET );
+
+			mapper.writeValue( out.getWriter( "US-ASCII" ), rootNode );
+			out.commit();
 		}
 		finally {
-			try {if ( os != null ) os.close();}
-			catch ( IOException e ) {}
+			if ( out != null ) out.close();
 		}
 	}
 }

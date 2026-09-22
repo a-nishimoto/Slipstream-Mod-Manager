@@ -10,6 +10,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.io.Writer;
+import net.vhati.util.AtomicFileOutput;
 
 
 public class SlipstreamConfig {
@@ -73,9 +75,9 @@ public class SlipstreamConfig {
 
 	public void writeConfig() throws IOException {
 
-		OutputStream out = null;
+		AtomicFileOutput out = null;
 		try {
-			out = new FileOutputStream( configFile );
+			out = new AtomicFileOutput( configFile );
 
 			Map<String, String> userFieldsMap = new LinkedHashMap<String, String>();
 			Map<String, String> appFieldsMap = new LinkedHashMap<String, String>();
@@ -110,13 +112,12 @@ public class SlipstreamConfig {
 				commentsBuf.append( String.format( " %-"+ fieldWidth +"s - %s\n", entry.getKey(), entry.getValue() ) );
 			}
 
-			OutputStreamWriter writer = new OutputStreamWriter( out, "UTF-8" );
+			Writer writer = out.getWriter( "UTF-8" );
 			config.store( writer, commentsBuf.toString() );
-			writer.flush();
+			out.commit();
 		}
 		finally {
-			try {if ( out != null ) out.close();}
-			catch ( IOException e ) {}
+			if ( out != null ) out.close();
 		}
 	}
 }

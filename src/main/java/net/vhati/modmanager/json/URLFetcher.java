@@ -24,6 +24,7 @@ import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
+import net.vhati.util.AtomicFileOutput;
 
 
 public class URLFetcher {
@@ -74,7 +75,7 @@ public class URLFetcher {
 		}
 
 		HttpGet request = null;
-		OutputStream localOut = null;
+		AtomicFileOutput localOut = null;
 		String remoteETag = null;
 
 		RequestConfig requestConfig = RequestConfig.custom()
@@ -103,8 +104,11 @@ public class URLFetcher {
 
 				HttpEntity entity = response.getEntity();
 				if ( entity != null ) {
-					localOut = new FileOutputStream( localFile );
-					entity.writeTo( localOut );
+					// Staged: a dropped connection must not truncate the
+					// catalog that ships with the app.
+					localOut = new AtomicFileOutput( localFile );
+					entity.writeTo( localOut.getOutputStream() );
+					localOut.commit();
 				}
 
 				if ( response.containsHeader( "ETag" ) ) {
@@ -131,8 +135,7 @@ public class URLFetcher {
 			return false;
 		}
 		finally {
-			try {if ( localOut != null ) localOut.close();}
-			catch ( IOException e ) {}
+			if ( localOut != null ) localOut.close();
 
 			try {httpClient.close();}
 			catch ( IOException e ) {}

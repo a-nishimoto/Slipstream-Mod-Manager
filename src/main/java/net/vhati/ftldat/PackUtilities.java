@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import net.vhati.util.AtomicFileOutput;
 
 
 public class PackUtilities {
@@ -59,23 +60,28 @@ public class PackUtilities {
 	 */
 	public static void copyFile( File srcFile, File dstFile ) throws IOException {
 		FileInputStream is = null;
-		FileOutputStream os = null;
+		AtomicFileOutput out = null;
 		try {
 			is = new FileInputStream( srcFile );
-			os = new FileOutputStream( dstFile );
+			out = new AtomicFileOutput( dstFile );
+			OutputStream os = out.getOutputStream();
 
 			byte[] buf = new byte[4096];
 			int len;
 			while ( (len = is.read( buf )) >= 0 ) {
 				os.write( buf, 0, len );
 			}
+
+			// Note commit() propagates a failing close(), unlike the old code,
+			// which swallowed it -- a truncated vanilla backup used to look
+			// like a successful one.
+			out.commit();
 		}
 		finally {
 			try {if ( is != null ) is.close();}
 			catch ( IOException e ) {}
 
-			try {if ( os != null ) os.close();}
-			catch ( IOException e ) {}
+			if ( out != null ) out.close();
 		}
 	}
 
