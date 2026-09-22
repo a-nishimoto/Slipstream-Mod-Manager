@@ -97,6 +97,17 @@ public class URLFetcher {
 		try {
 			request = new HttpGet( url );
 
+			// The ETag was read from disk above but never sent, so the server
+			// had no way to answer 304 and both feeds were downloaded in full
+			// on every check. The 304 branch below has been unreachable since
+			// the move to HttpComponents.
+			// Only claim a cached copy when one is actually on disk. If the
+			// content file were deleted while its ETag survived, the server
+			// would keep answering 304 and the file would never come back.
+			if ( localETag != null && localFile.exists() ) {
+				request.setHeader( "If-None-Match", localETag );
+			}
+
 			HttpResponse response = httpClient.execute( request );
 
 			int status = response.getStatusLine().getStatusCode();

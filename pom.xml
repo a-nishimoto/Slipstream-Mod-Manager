@@ -66,6 +66,19 @@
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpclient</artifactId>
 			<version>4.5.14</version>  <!-- Last of the 4.5.x line. -->
+			<exclusions>
+				<!-- Replaced by jcl-over-slf4j below, so HTTP logging reaches
+				     logback and the log file users paste on the forum. -->
+				<exclusion>
+					<groupId>commons-logging</groupId>
+					<artifactId>commons-logging</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>jcl-over-slf4j</artifactId>
+			<version>${slf4j.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>info.picocli</groupId>
