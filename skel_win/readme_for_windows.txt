@@ -13,15 +13,16 @@ About
 
 Requirements
 
-  Java (1.6 or higher).
-    http://www.java.com/en/download/
+  Java 17 or higher.
+    https://adoptium.net/
 
-  FTL (1.01-1.6.2, Windows/OSX/Linux, Steam/GOG/Standalone).
+  FTL (1.01-1.6.3, Windows/OSX/Linux, Steam/GOG/Standalone).
     https://subsetgames.com/
 
-  * WinXP SP1 can't run Java 1.7.
-    (1.7 was built with VisualStudio 2010, causing a DecodePointer error.)
-    To get 1.6, you may have to google "jdk-6u45-windows-i586.exe".
+  * If modman.exe reports that it cannot find Java, make sure java.exe is on
+    your PATH, or set JAVA_HOME. Recent Java installers no longer register
+    themselves the way Windows launchers traditionally looked for them.
+    You can also skip the launcher entirely:  java -jar modman.jar
 
 
 Setup

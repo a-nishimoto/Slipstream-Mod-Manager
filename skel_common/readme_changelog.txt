@@ -1,5 +1,26 @@
 Changelog
 
+Unreleased (personal fork):
+- Now requires Java 17; builds and runs on current JDKs
+- Fixed ftl.dat corruption when patching was cancelled before the repack
+- Refused to rebuild a vanilla backup from dats that may already be modded
+- Verified vanilla backups against recorded checksums before restoring
+- Wrote backups, config, mod order and downloads atomically
+- Rejected mod paths that escape the folder during Extract Dats
+- Stopped mod XML resolving external entities
+- Reported patch warnings in the app instead of only the log
+- Fixed <mod:par op="AND"> collecting tags that matched only one criterion
+- Warned when a <find...> matches nothing or <mod:setValue> discards children
+- Accepted the reserved xml prefix (xml:space, xml:lang) in mod XML
+- Stopped truncating character references above U+FFFF
+- Fixed Validate abandoning its report on an XML error at line 1
+- Fixed Validate skipping the rest of an archive after an unreadable PNG
+- Stopped Validate reporting a valid mod as both broken and fine
+- Sent the cached ETag, so feeds are no longer re-downloaded every check
+- Routed Apache HTTP logging into the log file
+- Updated dependencies to current versions
+- Removed the unused tri-state tree widgets
+
 1.9.2:
 - Fixed ftl.dat parsing when 0-byte resources are present
 

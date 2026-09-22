@@ -50,9 +50,14 @@ cd "${maindir}";
 # Search in $PATH among other places.
 java_cmd=$(command -v java);
 
-# OSX uses a command to decide java's location (or prompt the user to install it).
+# OSX uses a command to decide java's location.
+# The old "--request" flag asked OSX to prompt for a Java install when none was
+# present. Current OSX no longer recognizes it: java_home prints "unrecognized
+# option" to stderr on every launch, then carries on and reports the path
+# anyway. Dropping it loses nothing -- the install prompt it triggered is gone
+# -- and stops the warning.
 if [ -x "/usr/libexec/java_home" ]; then
-  export JAVA_HOME=$(/usr/libexec/java_home --request)
+  export JAVA_HOME=$(/usr/libexec/java_home)
 
   if [ -n "${JAVA_HOME}" ]; then
     java_cmd=${JAVA_HOME}/bin/java

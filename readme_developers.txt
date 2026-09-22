@@ -17,14 +17,24 @@ To build, run "mvn clean package" in this folder.
 
 "skel_exe/"
   Materials to create modman.exe (not part of Maven).
-    - Get Launch4j: http://launch4j.sourceforge.net/index.html
+    - Get Launch4j 3.50 or newer: https://launch4j.sourceforge.net/
     - Drag "launch4j_*.xml" onto "launch4jc.exe".
     - "modman.exe" will appear alongside the xml.
-    - Drag modman.exe into "skel_win/".
+    - Drag modman.exe and modman_admin.exe into "skel_win/".
     - Run "mvn clean package".
 
     - The manifest files will be embedded to prevent VirtualStore redirection.
         http://www.codeproject.com/Articles/17968/Making-Your-Application-UAC-Aware
+
+    - Launch4j 3.50 or newer is REQUIRED. The configs use its schema: it
+      removed <jdkPreference> and <runtimeBits>, and made <jre><path>
+      required. An older Launch4j will not load these files.
+
+    - The exes currently in skel_win/ predate all of this. They search only
+      the legacy SOFTWARE\JavaSoft registry keys, which Adoptium, Microsoft
+      and Zulu builds do not create, so they may fail to find a modern JDK
+      no matter what is installed. Regenerate them before shipping a
+      release, and test on a Windows machine that has only a current JDK.
 
 "auto_update.json"
   Info about the latest release, downloaded periodically by clients.

@@ -8,7 +8,7 @@
 	<cmdLine></cmdLine>
 	<chdir>.</chdir>
 	<priority>normal</priority>
-	<downloadUrl>https://java.com/en/download/</downloadUrl>
+	<downloadUrl>https://adoptium.net/</downloadUrl>
 	<supportUrl></supportUrl>
 	<customProcName>false</customProcName>
 	<stayAlive>false</stayAlive>
@@ -18,11 +18,28 @@
 		<mainClass>net.vhati.modmanager.FTLModManager</mainClass>
 		<cp>modman.jar</cp>
 	</classPath>
+	<!--
+		Launch4j 3.50+ schema. The old <jdkPreference> and <runtimeBits>
+		elements were removed and <path> became required, so the previous
+		config would not even load in a current Launch4j.
+
+		<path> matters more than the version bump. The generated exe used to
+		find a runtime only through the registry, under
+		SOFTWARE\JavaSoft\Java Runtime Environment, the legacy Oracle layout.
+		Adoptium, Microsoft and Zulu builds do not create those keys, so on a
+		machine with a modern JDK the launcher could find no Java at all,
+		whatever minVersion said. %PATH% is what fixes that: Adoptium adds
+		itself to PATH even though it leaves JAVA_HOME unset.
+
+		minVersion is 17 because that is what the jar is compiled for. An
+		older runtime would fail with UnsupportedClassVersionError after
+		launching, which is a worse experience than being told up front.
+		maxVersion is omitted deliberately, so there is no upper bound.
+	-->
 	<jre>
-		<path></path>
-		<minVersion>1.6.0</minVersion>
-		<maxVersion></maxVersion>
-		<jdkPreference>preferJre</jdkPreference>
-		<runtimeBits>64/32</runtimeBits>
+		<path>%JAVA_HOME%;%PATH%</path>
+		<minVersion>17</minVersion>
+		<requiresJdk>false</requiresJdk>
+		<requires64Bit>false</requires64Bit>
 	</jre>
 </launch4jConfig>
