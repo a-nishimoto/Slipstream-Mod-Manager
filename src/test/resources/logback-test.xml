@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	Test-only logging. Logback prefers logback-test.xml over logback.xml when
+	it is on the classpath, and test resources are not packaged, so this never
+	reaches a release.
+
+	Several tests deliberately feed malformed input to code that logs an error
+	and then recovers; that recovery IS the assertion. Logback appends a full
+	stack trace whenever the pattern lacks an explicit exception directive, so
+	those 14 intentional events printed 832 lines of JUnit and surefire frames,
+	87% of the entire build output. A passing build looked broken, and a real
+	failure would have been buried in it.
+
+	%nopex keeps the message and drops the trace, so one line per event still
+	shows the negative path ran.
+-->
+<configuration debug="false">
+
+	<appender name="Console" class="ch.qos.logback.core.ConsoleAppender">
+		<target>System.err</target>
+		<encoder>
+			<pattern>%-5level %logger{0} - %msg%nopex%n</pattern>
+		</encoder>
+	</appender>
+
+	<!--
+		WARN rather than DEBUG. Tests assert on return values and reports rather
+		than on log output, so debug chatter is noise, but a test provoking an
+		unexpected warning is worth seeing.
+	-->
+	<logger name="net.vhati" level="warn" additivity="false">
+		<appender-ref ref="Console" />
+	</logger>
+
+	<root level="warn">
+		<appender-ref ref="Console" />
+	</root>
+</configuration>
