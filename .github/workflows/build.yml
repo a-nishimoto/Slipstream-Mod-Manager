@@ -34,7 +34,8 @@ jobs:
       # Building on 21 and 25 tests that the toolchain and dependencies keep
       # working ahead of the target, which is how this project got stuck before.
       - name: Build and test
-        run: mvn -B --no-transfer-progress clean verify
+        shell: bash
+        run: ./mvnw -B --no-transfer-progress clean verify
 
       - name: Check the built jar actually starts
         # Slipstream refuses to run unless ./mods/ exists in the working

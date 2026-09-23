@@ -888,6 +888,56 @@ public class ModUtilities {
 	 *
 	 * @param text unparsed xml
 	 */
+	/**
+	 * Renders a parse failure as a report message, quoting the offending line.
+	 *
+	 * validateModXML and validateSloppyModXML each carried their own copy of
+	 * this. The copies had already drifted in brace style, and both contained
+	 * the same off-by-one that made an error on line 1 throw
+	 * StringIndexOutOfBoundsException and abandon the whole report -- fixing it
+	 * meant finding and editing both.
+	 *
+	 * Takes a CharSequence so it serves the strict validator's StringBuffer and
+	 * the sloppy one's String alike.
+	 */
+	private static ReportMessage describeParseFailure( JDOMParseException e, CharSequence src ) {
+		int lineNum = e.getLineNumber();
+
+		if ( lineNum == -1 ) {
+			return new ReportMessage(
+				ReportMessage.EXCEPTION,
+				"An error occurred. See log for details."
+			);
+		}
+
+		// Line 1 has no preceding newline, so the "i == lineNum-1" branch never
+		// fires for it. Starting at 0 means the slice covers the buffer from the
+		// beginning, instead of underflowing.
+		int badStart = 0;
+		int badEnd = -1;
+		String badLine = "???";
+
+		Matcher lineMatcher = Pattern.compile( "\n|\\z" ).matcher( src );
+		for ( int i=1; i <= lineNum && lineMatcher.find(); i++ ) {
+			if ( i == lineNum-1 ) {
+				badStart = lineMatcher.end();
+			}
+			else if ( i == lineNum ) {
+				badEnd = lineMatcher.start();
+				if ( badStart <= badEnd ) badLine = src.subSequence( badStart, badEnd ).toString();
+			}
+		}
+
+		String msg = String.format( "Fix this and try again:\n%s", e.toString() );
+		msg += "\n";
+		msg += "~  ~  ~  ~  ~\n";
+		msg += badLine +"\n";
+		msg += "~  ~  ~  ~  ~";
+
+		return new ReportMessage( ReportMessage.EXCEPTION, msg );
+	}
+
+
 	public static Report validateModXML( String text ) {
 
 		List<ReportMessage> messages = new ArrayList<ReportMessage>();
@@ -1084,39 +1134,7 @@ public class ModUtilities {
 			}
 		}
 		catch ( JDOMParseException e ) {
-			int lineNum = e.getLineNumber();
-			if ( lineNum != -1 ) {
-				// Line 1 has no preceding newline, so the "i == lineNum-1" branch
-				// below never fires for it. Starting at 0 means the slice covers
-				// the buffer from the beginning, instead of underflowing.
-				int badStart = 0;
-				int badEnd = -1;
-				String badLine = "???";
-				m = Pattern.compile( "\n|\\z" ).matcher( srcBuf );
-				for ( int i=1; i <= lineNum && m.find(); i++ ) {
-					if ( i == lineNum-1 ) {
-						badStart = m.end();
-					} else if ( i == lineNum ) {
-						badEnd = m.start();
-						if ( badStart <= badEnd ) badLine = srcBuf.substring( badStart, badEnd );
-					}
-				}
-				String msg = String.format( "Fix this and try again:\n%s", e.toString() );
-				msg += "\n";
-				msg += "~  ~  ~  ~  ~\n";
-				msg += badLine +"\n";
-				msg += "~  ~  ~  ~  ~";
-				messages.add( new ReportMessage(
-					ReportMessage.EXCEPTION,
-					msg
-				) );
-			}
-			else {
-				messages.add( new ReportMessage(
-					ReportMessage.EXCEPTION,
-					"An error occurred. See log for details."
-				) );
-			}
+			messages.add( describeParseFailure( e, srcBuf ) );
 			xmlValid = false;
 		}
 		catch ( Exception e ) {
@@ -1150,41 +1168,13 @@ public class ModUtilities {
 			parser.build( text );
 		}
 		catch ( JDOMParseException e ) {
-			int lineNum = e.getLineNumber();
-			if ( lineNum != -1 ) {
-				// Line 1 has no preceding newline, so the "i == lineNum-1" branch
-				// below never fires for it. Starting at 0 means the slice covers
-				// the buffer from the beginning, instead of underflowing.
-				int badStart = 0;
-				int badEnd = -1;
-				String badLine = "???";
-				Matcher m = Pattern.compile( "\n|\\z" ).matcher( text );
-				for ( int i=1; i <= lineNum && m.find(); i++ ) {
-					if ( i == lineNum-1 ) {
-						badStart = m.end();
-					}
-					else if ( i == lineNum ) {
-						badEnd = m.start();
-						if ( badStart <= badEnd ) badLine = text.substring( badStart, badEnd );
-					}
-				}
-				String msg = String.format( "Fix this and try again:\n%s", e.toString() );
-				msg += "\n";
-				msg += "~  ~  ~  ~  ~\n";
-				msg += badLine +"\n";
-				msg += "~  ~  ~  ~  ~";
-				messages.add( new ReportMessage(
-					ReportMessage.EXCEPTION,
-					msg
-				) );
-			}
-			else {
+			// The strict validator does not log here; this one always has,
+			// because reaching the sloppy parser at all already means something
+			// was wrong. Kept as-is.
+			if ( e.getLineNumber() == -1 ) {
 				log.error( "Error while validating mod xml with the sloppy parser.", e );
-				messages.add( new ReportMessage(
-					ReportMessage.EXCEPTION,
-					"An error occurred. See log for details."
-				) );
 			}
+			messages.add( describeParseFailure( e, text ) );
 			xmlValid = false;
 		}
 		catch ( Exception e ) {

@@ -14,6 +14,8 @@ Exit status: 0 clean, 1 vulnerabilities found, 2 the check itself failed.
 """
 
 import json
+import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -28,10 +30,19 @@ DEP_LINE = re.compile(
 )
 
 
+def maven_command():
+    """Prefer the pinned wrapper, so this needs no system Maven."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    wrapper = root / ("mvnw.cmd" if os.name == "nt" else "mvnw")
+    if wrapper.exists():
+        return [str(wrapper)]
+    return ["mvn"]
+
+
 def resolved_dependencies():
     """Ask Maven what actually ends up on the classpath."""
     proc = subprocess.run(
-        ["mvn", "-B", "--no-transfer-progress", "dependency:list"],
+        maven_command() + ["-B", "--no-transfer-progress", "dependency:list"],
         capture_output=True, text=True,
     )
     if proc.returncode != 0:

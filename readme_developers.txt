@@ -1,9 +1,13 @@
 The build process for this project is automated by Maven.
-  http://maven.apache.org/
-  http://docs.codehaus.org/display/MAVENUSER/Getting+Started+with+Maven
+  https://maven.apache.org/
 
+To build, run "./mvnw clean package" in this folder ("mvnw.cmd" on Windows).
 
-To build, run "mvn clean package" in this folder.
+The wrapper downloads and pins Maven 3.9.16 on first use, so no system Maven is
+needed and CI, contributors and you all build with the same version. A system
+"mvn clean package" still works if you prefer.
+
+Requires JDK 17 or newer.
 
 
 "img/"

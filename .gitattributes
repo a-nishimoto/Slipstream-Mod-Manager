@@ -9,8 +9,15 @@
 *.sh      text eol=lf
 *.py      text eol=lf diff=python
 
+# The Maven wrapper. mvnw is a POSIX script and breaks with CRLF; mvnw.cmd is
+# a batch file and needs CRLF. Neither was covered: mvnw has no extension, and
+# there was a rule for *.bat but not *.cmd.
+mvnw       text eol=lf
+mvnw.cmd   text eol=crlf
+
 # These will always have CRLF line endings
 *.bat      text eol=crlf
+*.cmd      text eol=crlf
 *.ini      text eol=crlf
 *.manifest text eol=crlf
 
