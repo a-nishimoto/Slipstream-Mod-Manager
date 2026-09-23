@@ -1,0 +1,71 @@
+name: Build
+
+# A personal fork, so this runs on every branch rather than a curated list.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.os }} / JDK ${{ matrix.java }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Report every combination. A Windows-only failure is exactly the kind of
+      # thing this matrix exists to surface, and cancelling siblings would hide
+      # whether it was platform-specific.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        java: ['17', '21', '25']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+
+      # maven.compiler.release is 17, so newer JDKs still produce 17 bytecode.
+      # Building on 21 and 25 tests that the toolchain and dependencies keep
+      # working ahead of the target, which is how this project got stuck before.
+      - name: Build and test
+        run: mvn -B --no-transfer-progress clean verify
+
+      - name: Check the built jar actually starts
+        # Slipstream refuses to run unless ./mods/ exists in the working
+        # directory, so exercise it the way a user would: from an extracted
+        # distribution, not from target/.
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p smoke
+          tar xzf target/SlipstreamModManager_*-Unix.tar.gz -C smoke --strip-components=1
+          cd smoke
+          java -jar modman.jar --version
+          java -jar modman.jar --list-mods
+          java -jar modman.jar --validate "Beginning Scrap Advantage 1.2.ftl"
+
+      - name: Upload distribution artifacts
+        # One combination is enough; the artifacts are identical across them.
+        if: matrix.os == 'ubuntu-latest' && matrix.java == '17'
+        uses: actions/upload-artifact@v4
+        with:
+          name: slipstream-dist
+          path: |
+            target/modman.jar
+            target/SlipstreamModManager_*-Win.zip
+            target/SlipstreamModManager_*-Unix.tar.gz
+          if-no-files-found: error
+
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-${{ matrix.os }}-jdk${{ matrix.java }}
+          path: target/surefire-reports/
+          if-no-files-found: ignore
