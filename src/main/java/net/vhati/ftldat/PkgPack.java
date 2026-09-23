@@ -107,29 +107,48 @@ public class PkgPack extends AbstractPack {
 		// A reusable buffer large enough for the unsigned read methods.
 		smallByteBuf = ByteBuffer.allocate( 4 );  // Defaults to BIG_ENDIAN.
 
+		String rafMode;
+		boolean creating = false;
+
 		if ( mode.equals( "r" ) ) {
 			if ( !datFile.exists() )
 				throw new FileNotFoundException( String.format( "The datFile was not found: %s", datFile.getPath() ) );
 
-			this.datFile = datFile;
-			raf = new RandomAccessFile( datFile, "r" );
-			readIndex();
+			rafMode = "r";
 		}
 		else if ( mode.equals( "r+" ) ) {
 			if ( !datFile.exists() )
 				throw new FileNotFoundException( String.format( "The datFile was not found: %s", datFile.getPath() ) );
 
-			this.datFile = datFile;
-			raf = new RandomAccessFile( datFile, "rw" );
-			readIndex();
+			rafMode = "rw";
 		}
 		else if ( mode.equals( "w+" ) ) {
-			this.datFile = datFile;
-			raf = new RandomAccessFile( datFile, "rw" );
-			createIndex( entryCount );
+			rafMode = "rw";
+			creating = true;
 		}
 		else {
-			throw new IllegalArgumentException( String.format( "FTLPack constructor's mode arg was not 'r', 'r+', or 'w+' (%s).", mode ) );
+			throw new IllegalArgumentException( String.format( "PkgPack constructor's mode arg was not 'r', 'r+', or 'w+' (%s).", mode ) );
+		}
+
+		this.datFile = datFile;
+		raf = new RandomAccessFile( datFile, rafMode );
+
+		// Indexing reads the archive and throws on a corrupt one. Without this,
+		// the RandomAccessFile stayed open and the handle leaked for the life of
+		// the JVM. On Windows that also LOCKS the file, so the dat could not be
+		// deleted or replaced afterward -- and a corrupt dat is exactly when a
+		// user needs to restore one over it.
+		try {
+			if ( creating ) createIndex( entryCount );
+			else readIndex();
+		}
+		catch ( IOException e ) {
+			closeQuietly();
+			throw e;
+		}
+		catch ( RuntimeException e ) {
+			closeQuietly();
+			throw e;
 		}
 	}
 
@@ -364,6 +383,12 @@ public class PkgPack extends AbstractPack {
 		return HEADER_SIZE + (long)entryList.size() * ENTRY_SIZE;
 	}
 
+	/** Releases the file handle after a failed open, preserving the original error. */
+	private void closeQuietly() {
+		try {if ( raf != null ) raf.close();}
+		catch ( IOException e ) {}
+	}
+
 	private void createIndex( int entryCount ) throws IOException {
 		pathsRegionSize = 0;
 
@@ -404,7 +429,9 @@ public class PkgPack extends AbstractPack {
 			throw new IOException( String.format( "Corrupt dat file (%s): header claims entries are %d bytes (expected %d)", getName(), entrySize, ENTRY_SIZE ) );
 		}
 		int entryCount = (int)readBigUInt();   // Risky casting to signed.
-		if ( entryCount * entrySize > raf.length() ) {
+		// Long arithmetic: see FTLPack.readIndex. As ints this overflows on a
+		// junk header and lets an absurd entry count through.
+		if ( entryCount < 0 || (long)entryCount * entrySize > raf.length() ) {
 			throw new IOException( String.format( "Corrupt dat file (%s): header claims entries combined are larger than the entire file", getName() ) );
 		}
 		pathsRegionSize = (int)readBigUInt();  // Risky casting to signed.

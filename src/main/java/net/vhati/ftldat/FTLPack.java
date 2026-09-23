@@ -70,29 +70,45 @@ public class FTLPack extends AbstractPack {
 		byteBuffer = ByteBuffer.allocate( 4 );
 		byteBuffer.order( ByteOrder.LITTLE_ENDIAN );
 
+		String rafMode;
+		boolean creating = false;
+
 		if ( mode.equals( "r" ) ) {
 			if ( !datFile.exists() )
 				throw new FileNotFoundException( String.format( "The datFile was not found: %s", datFile.getPath() ) );
 
-			this.datFile = datFile;
-			raf = new RandomAccessFile( datFile, "r" );
-			readIndex();
+			rafMode = "r";
 		}
 		else if ( mode.equals( "r+" ) ) {
 			if ( !datFile.exists() )
 				throw new FileNotFoundException( String.format( "The datFile was not found: %s", datFile.getPath() ) );
 
-			this.datFile = datFile;
-			raf = new RandomAccessFile( datFile, "rw" );
-			readIndex();
+			rafMode = "rw";
 		}
 		else if ( mode.equals( "w+" ) ) {
-			this.datFile = datFile;
-			raf = new RandomAccessFile( datFile, "rw" );
-			createIndex( indexSize );
+			rafMode = "rw";
+			creating = true;
 		}
 		else {
 			throw new IllegalArgumentException( String.format( "FTLPack constructor's mode arg was not 'r', 'r+', or 'w+' (%s)", mode ) );
+		}
+
+		this.datFile = datFile;
+		raf = new RandomAccessFile( datFile, rafMode );
+
+		// See PkgPack: indexing throws on a corrupt archive, and the handle used
+		// to leak -- locking the file on Windows.
+		try {
+			if ( creating ) createIndex( indexSize );
+			else readIndex();
+		}
+		catch ( IOException e ) {
+			closeQuietly();
+			throw e;
+		}
+		catch ( RuntimeException e ) {
+			closeQuietly();
+			throw e;
 		}
 	}
 
@@ -152,6 +168,12 @@ public class FTLPack extends AbstractPack {
 	 * Creates a new index.
 	 * WARNING: This will erase the file.
 	 */
+	/** Releases the file handle after a failed open, preserving the original error. */
+	private void closeQuietly() {
+		try {if ( raf != null ) raf.close();}
+		catch ( IOException e ) {}
+	}
+
 	private void createIndex( int indexSize ) throws IOException {
 		entryList = new ArrayList<DatEntry>( indexSize );
 		for ( int i=0; i < indexSize; i++ ) {
@@ -173,10 +195,18 @@ public class FTLPack extends AbstractPack {
 	 */
 	private void readIndex() throws IOException {
 		raf.seek( 0 );
-		int indexSize = (int)readLittleUInt();
-		if ( indexSize * 4 > raf.length() ) {
+		long claimedSize = readLittleUInt();
+
+		// The multiplication has to be done in long. As an int, a junk header
+		// such as the ASCII "this" (1,936,157,556) made indexSize * 4 overflow
+		// to a NEGATIVE number, which sailed past this very check and then
+		// allocated a list of nearly two billion entries -- OutOfMemoryError
+		// rather than the intended "corrupt dat file". Reachable by pointing
+		// Extract Dats at a file that is not an FTL archive.
+		if ( claimedSize < 0 || claimedSize * 4 > raf.length() ) {
 			throw new IOException( String.format( "Corrupt dat file (%s): header claims to be larger than the entire file", getName() ) );
 		}
+		int indexSize = (int)claimedSize;
 
 		entryList = new ArrayList<DatEntry>( indexSize );
 		for ( int i=0; i < indexSize; i++ ) {

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
@@ -194,5 +195,29 @@ public class PkgPackRoundTripTest {
 		catch ( RuntimeException e ) {
 			throw new AssertionError( "Corrupt archive raised a RuntimeException callers cannot catch: "+ e, e );
 		}
+	}
+
+
+	/**
+	 * A failed open must not keep the file handle.
+	 *
+	 * Indexing reads the archive and throws on a corrupt one; the
+	 * RandomAccessFile used to stay open. POSIX hides this -- an unlinked file
+	 * with a live handle still disappears -- but Windows LOCKS it, so the dat
+	 * could not be deleted or replaced afterward. Found by CI on Windows, where
+	 * JUnit could not clean up its own @TempDir.
+	 *
+	 * Deleting is the portable proxy for "no handle is held": it always succeeds
+	 * on POSIX, so this assertion only really bites on Windows.
+	 */
+	@Test
+	public void aFailedOpenReleasesTheFileHandle( @TempDir File tmpDir ) throws Exception {
+		File datFile = new File( tmpDir, "corrupt.dat" );
+		java.nio.file.Files.write( datFile.toPath(), "this is not an archive".getBytes( StandardCharsets.UTF_8 ) );
+
+		assertThrows( Exception.class, () -> new PkgPack( datFile, "r" ) );
+
+		assertTrue( datFile.delete(),
+			"the file is still locked, so the failed open leaked its handle" );
 	}
 }
