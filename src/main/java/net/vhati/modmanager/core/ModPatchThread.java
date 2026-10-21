@@ -134,8 +134,30 @@ public class ModPatchThread extends Thread {
 			List<DatBackupManager.BackedUpDat> backedUpDats = backupManager.getDats();
 
 			// Don't let dats be read-only.
+			//
+			// The return value used to be ignored. A failed chmod means the
+			// dat is owned by someone else; the probe below reports it when
+			// that actually blocks the patch, but log it either way since
+			// group/other bits may leave the dat writable anyway and this is
+			// then the only trace of why.
+			List<File> datFiles = new ArrayList<File>();
 			for ( DatBackupManager.BackedUpDat bud : backedUpDats ) {
-				if ( bud.datFile.exists() ) bud.datFile.setWritable( true );
+				if ( !bud.datFile.exists() ) continue;
+				datFiles.add( bud.datFile );
+				if ( !bud.datFile.setWritable( true ) ) {
+					log.warn( "Could not clear the read-only flag on: "+ bud.datFile );
+				}
+			}
+
+			// Fail before touching anything, rather than mid-patch after
+			// backups were made and vanilla dats were partly restored. The
+			// probe performs the same writes the patch will perform, so its
+			// verdict is not a heuristic -- see PermissionProbe.
+			List<PermissionProbe.Problem> problems = PermissionProbe.probe( datsDir, backupDir, datFiles );
+			if ( !problems.isEmpty() ) {
+				String message = PermissionProbe.describe( problems );
+				log.error( "Pre-flight permission check failed:\n"+ message );
+				throw new IOException( message );
 			}
 
 			final int backupSteps = Math.max( 1, backedUpDats.size() );

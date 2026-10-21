@@ -139,7 +139,7 @@ public class ModPatchDialog extends ProgressDialog implements ModPatchObserver {
 			}
 			setStatusText( buf.toString() );
 		} else {
-			setStatusText( String.format( "Patching failed: %s", e ) );
+			setStatusText( String.format( "Patching failed: %s", describeException( e ) ) );
 		}
 	}
 }

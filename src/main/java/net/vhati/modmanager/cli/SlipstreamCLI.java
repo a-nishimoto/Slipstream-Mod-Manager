@@ -36,6 +36,7 @@ import net.vhati.modmanager.core.FTLUtilities;
 import net.vhati.modmanager.core.ModPatchObserver;
 import net.vhati.modmanager.core.ModPatchThread;
 import net.vhati.modmanager.core.ModUtilities;
+import net.vhati.modmanager.core.PermissionProbe;
 import net.vhati.modmanager.core.Report;
 import net.vhati.modmanager.core.Report.ReportFormatter;
 import net.vhati.modmanager.core.Report.ReportMessage;
@@ -169,6 +170,15 @@ public class SlipstreamCLI {
 
 			File extractDir = slipstreamCmd.extractDatsDir;
 
+			// Check the destination before opening the source packs, so a
+			// bad choice fails with advice instead of a raw Access Denied
+			// mid-write.
+			List<PermissionProbe.Problem> extractProblems = PermissionProbe.probeExtractDir( extractDir );
+			if ( !extractProblems.isEmpty() ) {
+				log.error( PermissionProbe.describe( extractProblems ) );
+				System.exit( 1 );
+			}
+
 			FolderPack dstPack = null;
 			List<AbstractPack> srcPacks = new ArrayList<AbstractPack>( 2 );
 			InputStream is = null;
@@ -277,7 +287,18 @@ public class SlipstreamCLI {
 				}
 			}
 
-			if ( !patchObserver.hasSucceeded() ) System.exit( 1 );
+			if ( !patchObserver.hasSucceeded() ) {
+				// ModPatchThread logs the full stack trace, which buries the
+				// lines that say what to do about it. Repeat those here, at
+				// the end, the same way the warnings summary above does.
+				Exception patchException = patchObserver.getException();
+				if ( patchException != null ) {
+					String message = patchException.getMessage();
+					if ( message == null || message.isEmpty() ) message = patchException.toString();
+					System.err.println( "Patching failed: "+ message );
+				}
+				System.exit( 1 );
+			}
 		}
 
 		if ( slipstreamCmd.runftl ) {  // Exits (0/1).
@@ -530,6 +551,7 @@ public class SlipstreamCLI {
 		private final List<String> warnings = new ArrayList<String>();
 		private boolean done = false;
 		private boolean succeeded = false;
+		private Exception exception = null;
 
 		@Override
 		public void patchingProgress( final int value, final int max ) {
@@ -554,11 +576,13 @@ public class SlipstreamCLI {
 		@Override
 		public synchronized void patchingEnded( boolean outcome, Exception e ) {
 			succeeded = outcome;
+			exception = e;
 			done = true;
 		}
 
 		public synchronized boolean isDone() { return done; }
 		public synchronized boolean hasSucceeded() { return succeeded; }
+		public synchronized Exception getException() { return exception; }
 		public synchronized List<String> getWarnings() { return new ArrayList<String>( warnings ); }
 	}
 

@@ -18,6 +18,8 @@ import net.vhati.ftldat.FolderPack;
 import net.vhati.ftldat.FTLPack;
 import net.vhati.ftldat.PkgPack;
 
+import net.vhati.modmanager.core.PermissionProbe;
+
 import net.vhati.modmanager.ui.ProgressDialog;
 
 
@@ -76,7 +78,7 @@ public class DatExtractDialog extends ProgressDialog {
 		if ( succeeded ) {
 			setStatusText( "All resources extracted successfully." );
 		} else {
-			setStatusText( String.format( "Error extracting dats: %s", e ) );
+			setStatusText( String.format( "Error extracting dats: %s", describeException( e ) ) );
 		}
 	}
 
@@ -101,6 +103,14 @@ public class DatExtractDialog extends ProgressDialog {
 			int progress = 0;
 
 			try {
+				// Check the destination before opening anything, so a bad
+				// choice fails with advice instead of a raw Access Denied
+				// mid-extraction.
+				List<PermissionProbe.Problem> problems = PermissionProbe.probeExtractDir( extractDir );
+				if ( !problems.isEmpty() ) {
+					throw new IOException( PermissionProbe.describe( problems ) );
+				}
+
 				File ftlDatFile = new File( datsDir, "ftl.dat" );
 				File dataDatFile = new File( datsDir, "data.dat" );
 				File resourceDatFile = new File( datsDir, "resource.dat" );

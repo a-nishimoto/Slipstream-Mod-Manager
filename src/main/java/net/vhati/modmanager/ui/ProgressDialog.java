@@ -181,6 +181,18 @@ public class ProgressDialog extends JDialog implements ActionListener {
 		});
 	}
 
+	/**
+	 * Returns the most human-readable form of an exception.
+	 *
+	 * Permission failures carry multi-line remediation advice as their
+	 * message, and the class-name prefix toString() adds only buries it.
+	 */
+	protected static String describeException( Exception e ) {
+		if ( e == null ) return "(no exception)";
+		String message = e.getMessage();
+		return ( message != null && message.length() > 0 ) ? message : e.toString();
+	}
+
 	protected void setTaskOutcome( final boolean outcome, final Exception e ) {
 		done = true;
 		succeeded = outcome;
