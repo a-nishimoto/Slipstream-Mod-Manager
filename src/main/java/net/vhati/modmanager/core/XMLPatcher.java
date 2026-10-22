@@ -379,7 +379,7 @@ public class XMLPatcher {
 				Map<Integer,Element> orderedCandidateMap = new TreeMap<Integer,Element>();
 				for ( Element candidate : candidateSet ) {
 					int index = contextNode.indexOf( candidate );
-					orderedCandidateMap.put( new Integer( index ), candidate );
+					orderedCandidateMap.put( Integer.valueOf( index ), candidate );
 				}
 
 				List<Element> matchedNodes = new ArrayList<Element>( orderedCandidateMap.values() );

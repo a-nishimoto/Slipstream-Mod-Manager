@@ -756,7 +756,7 @@ public class ModUtilities {
 							if ( chars == null )
 								chars = new ArrayList<Character>();
 
-							Character cObj = new Character( m.group( 0 ).charAt( 0 ) );
+							Character cObj = Character.valueOf( m.group( 0 ).charAt( 0 ) );
 							if ( !chars.contains( cObj ) )
 								chars.add( cObj );
 						}

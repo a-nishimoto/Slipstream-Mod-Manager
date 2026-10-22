@@ -30,7 +30,7 @@ public class ChecklistTableModel<T> extends AbstractTableModel implements Reorde
 		int newRowIndex = rowsList.size();
 
 		List<Object> rowData = new ArrayList<Object>();
-		rowData.add( new Boolean(selected) );
+		rowData.add( Boolean.valueOf( selected ) );
 		rowData.add( o );
 		rowsList.add( row, rowData );
 
@@ -63,7 +63,7 @@ public class ChecklistTableModel<T> extends AbstractTableModel implements Reorde
 	}
 
 	public void setSelected( int row, boolean b ) {
-		rowsList.get(row).set( DATA_CHECK, new Boolean( b ) );
+		rowsList.get(row).set( DATA_CHECK, Boolean.valueOf( b ) );
 		fireTableRowsUpdated( row, row );
 	}
 

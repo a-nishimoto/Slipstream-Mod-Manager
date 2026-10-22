@@ -47,7 +47,7 @@ public class TableRowTransferHandler extends TransferHandler {
 	protected Transferable createTransferable( JComponent c ) {
 		assert ( c == table );
 		int row = table.getSelectedRow();
-		return new IntegerTransferrable( new Integer( row ) );
+		return new IntegerTransferrable( Integer.valueOf( row ) );
 	}
 
 	@Override

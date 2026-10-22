@@ -320,7 +320,7 @@ public class ComparableVersion implements Comparable<ComparableVersion> {
 
 		List<Integer> tmpNumbers = new ArrayList<Integer>( getNumbers().length );
 		for ( int n : getNumbers() )
-			tmpNumbers.add( new Integer( n ) );
+			tmpNumbers.add( Integer.valueOf( n ) );
 		result = salt * result + tmpNumbers.hashCode();
 
 		String tmpSuffix = getSuffix();
