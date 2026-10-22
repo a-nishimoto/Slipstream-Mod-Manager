@@ -298,7 +298,7 @@ public class ModPatchThread extends Thread {
 						}
 
 						String innerPath = item.getName();
-						innerPath = innerPath.replace( '\\', '/' );  // Non-standard zips.
+						innerPath = ModUtilities.normalizeInnerPath( innerPath );  // Non-standard zips.
 
 						Matcher m = pathPtn.matcher( innerPath );
 						if ( !m.matches() ) {

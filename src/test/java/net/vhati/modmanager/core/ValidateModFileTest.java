@@ -118,6 +118,27 @@ public class ValidateModFileTest {
 		assertTrue( stray.contains( "Extraneous top-level file" ), stray );
 	}
 
+	/**
+	 * A Win32-authored zip can store literal backslash paths. patch() installs
+	 * those through the same lossless conversion, yet validation used to call
+	 * them an ERROR -- two code paths giving opposite answers for the same
+	 * archive, with the mod installing fine despite "failing validation".
+	 * Both sides now share ModUtilities.normalizeInnerPath(), and the
+	 * validation answer is a warning.
+	 */
+	@Test
+	public void backslashPathsWarnInsteadOfFailingTheMod( @TempDir File tmpDir ) throws Exception {
+		String out = validateEntries( tmpDir, "winzip.ftl",
+			entries( "data\\notes.txt", "hi\r\n", PAD_PATH, PAD_BODY ) );
+
+		assertTrue( out.contains( "~ Backslashes in path" ), "should warn: "+ out );
+		assertFalse( out.contains( "! Backslashes" ), "must not be an error: "+ out );
+		// Only a normalized path passes the valid-root check; without sharing
+		// the fix these would surface as folder/stray complaints instead.
+		assertFalse( out.contains( "Unsupported top-level folder" ), out );
+		assertFalse( out.contains( "Extraneous top-level file" ), out );
+	}
+
 	@Test
 	public void junkFilesAreFlagged( @TempDir File tmpDir ) throws Exception {
 		String out = validateEntries( tmpDir, "junk.ftl",

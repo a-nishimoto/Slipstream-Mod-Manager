@@ -428,6 +428,20 @@ public class ModUtilities {
 
 
 	/**
+	 * Converts backslashes to forward slashes in a zip entry name.
+	 *
+	 * Zips authored by Win32 tools sometimes store backslash-separated paths
+	 * like "data\sub\file". The conversion is lossless and FTL's dat format
+	 * knows only forward slashes, so the agreed policy is to accept such
+	 * archives -- validate warns about them, patch installs them, and both
+	 * must agree or the two code paths give opposite answers.
+	 */
+	public static String normalizeInnerPath( String innerPath ) {
+		return innerPath.replace( '\\', '/' );
+	}
+
+
+	/**
 	 * Returns true if a path matches known junk files, false otherwise.
 	 * Matching is case-insensitive.
 	 *
@@ -491,12 +505,14 @@ public class ModUtilities {
 				pendingMsgs.clear();
 
 				if ( innerPath.indexOf( "\\" ) != -1 ) {
+					// WARNING, not ERROR: patch() installs these via the same
+					// conversion, so failing validation for them would be a
+					// lie. Win32-authored zips are common and lossless to fix.
 					pendingMsgs.add( new ReportMessage(
-						ReportMessage.ERROR,
-						String.format( "Backslashes in path. (Non-standard zip archive)" )
+						ReportMessage.WARNING,
+						String.format( "Backslashes in path. (Non-standard zip archive; treated as forward slashes)" )
 					) );
-					modValid = false;
-					innerPath = innerPath.replace( '\\', '/' );
+					innerPath = normalizeInnerPath( innerPath );
 				}
 
 				if ( !asciiEncoder.reset().canEncode( innerPath ) ) {

@@ -53,7 +53,7 @@ public class JDOMModMetadataReader {
 				}
 
 				String innerPath = item.getName();
-				innerPath = innerPath.replace( '\\', '/' );  // Non-standard zips.
+				innerPath = ModUtilities.normalizeInnerPath( innerPath );  // Non-standard zips.
 
 				if ( innerPath.equals( METADATA_INNERPATH ) ) {
 					String metadataText = ModUtilities.decodeText( zis, modFile.getName()+":"+METADATA_INNERPATH ).text;
