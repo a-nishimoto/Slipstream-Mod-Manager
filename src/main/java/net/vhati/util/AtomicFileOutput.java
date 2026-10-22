@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -43,6 +44,9 @@ import java.nio.file.StandardCopyOption;
  */
 public class AtomicFileOutput implements Closeable {
 
+	private static final int MOVE_RETRIES = 5;
+	private static final long MOVE_RETRY_DELAY_MS = 250L;
+
 	private final File dstFile;
 	private final File tmpFile;
 	private final FileOutputStream stream;
@@ -50,6 +54,7 @@ public class AtomicFileOutput implements Closeable {
 	private Writer writer = null;
 	private boolean committed = false;
 	private boolean closed = false;
+	private boolean moveFailed = false;
 
 
 	public AtomicFileOutput( File dstFile ) throws IOException {
@@ -81,6 +86,12 @@ public class AtomicFileOutput implements Closeable {
 
 	/**
 	 * Flushes, forces to disk, and renames the staged file over the destination.
+	 *
+	 * If the rename is refused -- characteristically a Windows AV scan on the
+	 * just-written file, or the running game still holding the destination --
+	 * the move is retried briefly before the exception reaches the caller.
+	 * Every byte of the payload is already on disk at that point; it is not
+	 * the staged file's fault that the last step is contested.
 	 */
 	public void commit() throws IOException {
 		if ( committed ) throw new IllegalStateException( "Already committed: "+ dstFile );
@@ -96,22 +107,60 @@ public class AtomicFileOutput implements Closeable {
 		stream.close();
 
 		try {
-			Files.move( tmpFile.toPath(), dstFile.toPath(),
-				StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE );
+			try {
+				moveIntoPlace( true );
+			}
+			catch ( AtomicMoveNotSupportedException e ) {
+				// Some filesystems (notably FAT32 on removable media, which FTL
+				// installs do turn up on) cannot rename atomically. A plain
+				// replace is still better than writing in place.
+				moveIntoPlace( false );
+			}
 		}
-		catch ( AtomicMoveNotSupportedException e ) {
-			// Some filesystems (notably FAT32 on removable media, which FTL
-			// installs do turn up on) cannot rename atomically. A plain
-			// replace is still better than writing in place.
-			Files.move( tmpFile.toPath(), dstFile.toPath(), StandardCopyOption.REPLACE_EXISTING );
+		catch ( IOException e ) {
+			// All the work is done and only the rename failed. Mark it so
+			// close() spares the staged file instead of discarding finished
+			// work -- a delayed cleanup can remove it once the lock is gone.
+			moveFailed = true;
+			throw e;
 		}
 
 		committed = true;
 		closed = true;
 	}
 
+	private void moveIntoPlace( boolean atomic ) throws IOException {
+		int attempts = 0;
+		while ( true ) {
+			try {
+				if ( atomic ) {
+					Files.move( tmpFile.toPath(), dstFile.toPath(),
+						StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE );
+				}
+				else {
+					Files.move( tmpFile.toPath(), dstFile.toPath(),
+						StandardCopyOption.REPLACE_EXISTING );
+				}
+				return;
+			}
+			catch ( AccessDeniedException e ) {
+				if ( ++attempts >= MOVE_RETRIES ) throw e;
+				try {Thread.sleep( MOVE_RETRY_DELAY_MS );}
+				catch ( InterruptedException ie ) {
+					// A cancel still gets the honest failure, not a false success.
+					Thread.currentThread().interrupt();
+					throw e;
+				}
+			}
+		}
+	}
+
 	/**
 	 * Releases the staged file, discarding it unless commit() succeeded.
+	 *
+	 * A commit whose rename failed leaves the staged file alone: it holds
+	 * completed work, and on Windows it typically cannot be deleted while
+	 * whatever denied the move still holds it.
 	 */
 	@Override
 	public void close() {
@@ -121,6 +170,6 @@ public class AtomicFileOutput implements Closeable {
 		try {stream.close();}
 		catch ( IOException e ) {}
 
-		if ( !committed && tmpFile.exists() ) tmpFile.delete();
+		if ( !committed && !moveFailed && tmpFile.exists() ) tmpFile.delete();
 	}
 }
