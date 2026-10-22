@@ -168,6 +168,30 @@ public class ValidateModFileTest {
 	}
 
 	/**
+	 * A "data/../x" key reads as living under data/ but resolves somewhere
+	 * else. FolderPack's canonical containment makes escaping impossible, but
+	 * the other packs install such a key under its resolved name -- never
+	 * where the mod author saw it go. Either way the archive is broken, so it
+	 * must not validate; names that merely contain dots ("..foo.txt") are
+	 * legitimate and must not be flagged.
+	 */
+	@Test
+	public void parentDirectorySegmentsFailValidation( @TempDir File tmpDir ) throws Exception {
+		String out = validateEntries( tmpDir, "dotdot.ftl", entries(
+			"data/../escape.txt", "hi\r\n",
+			"data/sub/../../out.txt", "hi\r\n",
+			"data\\..\\winescape.txt", "hi\r\n",   // must be caught after normalization
+			"data/..weird.txt", "hi\r\n",
+			PAD_PATH, PAD_BODY ) );
+
+		assertTrue( out.contains( "! Path segment \"..\"" ), out );
+		// 3, not 4: the backslash entry counts after normalization, while
+		// ..weird.txt -- a legitimate name containing dots -- must not match.
+		assertEquals( 3, countOccurrences( out, "Path segment \"..\"" ),
+			"exactly the three ..-segment entries should be flagged: "+ out );
+	}
+
+	/**
 	 * The __MACOSX tree macOS tools generate is junk, but its folder name fails
 	 * the valid-root check first; either way it must never read as clean.
 	 */

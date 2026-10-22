@@ -54,6 +54,9 @@ public class ModUtilities {
 
 	private static final Logger log = LoggerFactory.getLogger( ModUtilities.class );
 
+	// A whole path segment of "..", but not names like "..hidden.txt".
+	private static Pattern dotDotSegmentPtn = Pattern.compile( "(?:^|/)[.][.](?:/|$)" );
+
 	// Case-insensitive: Windows writes these capitalized (Thumbs.db, Desktop.ini),
 	// and a case-sensitive pattern let the real files slip through into dats.
 	private static Pattern junkFilePtn = Pattern.compile(
@@ -513,6 +516,20 @@ public class ModUtilities {
 						String.format( "Backslashes in path. (Non-standard zip archive; treated as forward slashes)" )
 					) );
 					innerPath = normalizeInnerPath( innerPath );
+				}
+
+				// A "data/../x" key resolves somewhere else than it reads.
+				// FolderPack's canonical containment makes escape impossible,
+				// but FTLPack/PkgPack keys silently mismatch intent, so an
+				// archive containing them is broken and must not pass.
+				// Checked only after backslash normalization: "data\..\x"
+				// becomes the same segment once normalized.
+				if ( dotDotSegmentPtn.matcher( innerPath ).find() ) {
+					pendingMsgs.add( new ReportMessage(
+						ReportMessage.ERROR,
+						String.format( "Path segment \"..\". (The file will not install where its name says)" )
+					) );
+					modValid = false;
 				}
 
 				if ( !asciiEncoder.reset().canEncode( innerPath ) ) {
