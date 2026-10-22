@@ -147,6 +147,9 @@ public class FTLModManager {
 				catch ( IOException e ) {}
 			}
 
+			// Same directory, hand-edited paths and all, should be one path.
+			SlipstreamConfig.canonicalizeDatsPath( props );
+
 			SlipstreamConfig appConfig = new SlipstreamConfig( props, configFile );
 
 			// Look-and-Feel.

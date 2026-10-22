@@ -73,6 +73,39 @@ public class SlipstreamConfig {
 	}
 
 
+	/**
+	 * Rewrites a loaded ftl_dats_path property as a canonical absolute path.
+	 *
+	 * The config file is hand-edited and copied between machines, and the
+	 * value goes straight into a File, so relative segments, doubled
+	 * separators and symlinks would otherwise survive into every later path
+	 * comparison (prompting, config-vs-detected checks) and make the same
+	 * directory look like two different paths.
+	 *
+	 * A path that does not exist is left exactly as written: validation and
+	 * the reconfigure prompt own that case, and they should report what the
+	 * user actually wrote rather than a rewritten guess.
+	 */
+	public static void canonicalizeDatsPath( Properties props ) {
+		String raw = props.getProperty( FTL_DATS_PATH );
+		if ( raw == null || raw.trim().isEmpty() ) return;
+
+		File datsDir = new File( raw.trim() );
+		if ( !datsDir.exists() ) return;
+
+		String canonicalPath;
+		try {
+			canonicalPath = datsDir.getCanonicalPath();
+		}
+		catch ( IOException e ) {
+			return;	// unresolvable (symlink loop etc.), let validation deal with it
+		}
+
+		if ( !canonicalPath.equals( raw ) )
+			props.setProperty( FTL_DATS_PATH, canonicalPath );
+	}
+
+
 	public void writeConfig() throws IOException {
 
 		AtomicFileOutput out = null;
@@ -83,7 +116,7 @@ public class SlipstreamConfig {
 			Map<String, String> appFieldsMap = new LinkedHashMap<String, String>();
 
 			userFieldsMap.put( ALLOW_ZIP,         "Sets whether to treat .zip files as .ftl files. Default: false." );
-			userFieldsMap.put( FTL_DATS_PATH,     "The path to FTL's resources folder. If invalid, you'll be prompted." );
+			userFieldsMap.put( FTL_DATS_PATH,     "The path to FTL's data folder (it contains resource.xml). If invalid, you'll be prompted. On Windows, prefer forward slashes, which work there too; a lone backslash is an escape character in this file, so write it doubled." );
 			userFieldsMap.put( STEAM_DISTRO,      "If true, FTL was installed via Steam. Stops the GUI asking for a path." );
 			userFieldsMap.put( STEAM_EXE_PATH,    "The path to Steam's executable, if FTL was installed via Steam." );
 			userFieldsMap.put( RUN_STEAM_FTL,     "If true, SMM will use Steam to launch FTL, if possible." );
