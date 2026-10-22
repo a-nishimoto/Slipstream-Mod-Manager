@@ -146,16 +146,15 @@ public class AtomicFileOutputTest {
 		seed( dst, "OLD" );
 
 		AtomicFileOutput out = new AtomicFileOutput( dst );  // stages while still writable
-		out.getOutputStream().write( "NEW".getBytes( StandardCharsets.UTF_8 ) );
-
-		Assumptions.assumeTrue( lockWrites( tmpDir ), "cannot deny writes in "+ tmpDir );
 		Thread releaser = new Thread( () -> {
 			try { Thread.sleep( 600 ); }
 			catch ( InterruptedException ie ) {}
 			tmpDir.setWritable( true );
 		} );
-		releaser.start();
 		try {
+			out.getOutputStream().write( "NEW".getBytes( StandardCharsets.UTF_8 ) );
+			Assumptions.assumeTrue( lockWrites( tmpDir ), "cannot deny writes in "+ tmpDir );
+			releaser.start();
 			out.commit();
 			assertEquals( "NEW", read( dst ) );
 		}
@@ -179,10 +178,9 @@ public class AtomicFileOutputTest {
 		seed( dst, "OLD" );
 
 		AtomicFileOutput out = new AtomicFileOutput( dst );
-		out.getOutputStream().write( "NEW".getBytes( StandardCharsets.UTF_8 ) );
-
-		Assumptions.assumeTrue( lockWrites( tmpDir ), "cannot deny writes in "+ tmpDir );
 		try {
+			out.getOutputStream().write( "NEW".getBytes( StandardCharsets.UTF_8 ) );
+			Assumptions.assumeTrue( lockWrites( tmpDir ), "cannot deny writes in "+ tmpDir );
 			assertThrows( AccessDeniedException.class, () -> out.commit() );
 			tmpDir.setWritable( true );
 
@@ -199,6 +197,7 @@ public class AtomicFileOutputTest {
 		}
 		finally {
 			tmpDir.setWritable( true );
+			out.close();
 		}
 	}
 }

@@ -201,7 +201,7 @@ public class FTLUtilitiesDatsDirTest {
 
 	private static int countFlatpak( List<String> paths ) {
 		int n = 0;
-		for ( String p : paths ) if ( p.contains( ".var/app/com.valvesoftware.Steam" ) ) n++;
+		for ( String p : paths ) if ( p.replace( '\\', '/' ).contains( ".var/app/com.valvesoftware.Steam" ) ) n++;
 		return n;
 	}
 }
