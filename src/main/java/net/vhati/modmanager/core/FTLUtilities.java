@@ -3,6 +3,7 @@ package net.vhati.modmanager.core;
 import java.awt.Component;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
@@ -45,14 +46,10 @@ public class FTLUtilities {
 	 *
 	 * Windows: Steam, GOG, HumbleBundle
 	 * Linux (Wine): GOG, HumbleBundle
-	 * Linux: Steam, HumbleBundle
+	 * Linux: Steam (including extra libraries and flatpak), HumbleBundle
 	 * OSX: Steam, HumbleBundle
 	 */
 	public static File findDatsDir() {
-		String steamPath = "Steam/steamapps/common/FTL Faster Than Light";
-		String gogPath = "GOG.com/Faster Than Light";
-		String humblePath = "FTL";
-
 		String programFiles86 = System.getenv( "ProgramFiles(x86)" );
 		String programFiles = System.getenv( "ProgramFiles" );
 
@@ -67,6 +64,43 @@ public class FTLUtilities {
 		String winePrefix = System.getenv( "WINEPREFIX" );
 		if ( winePrefix == null && home != null )
 			winePrefix = home +"/.wine";
+
+		List<String> steamLibraries = gatherSteamLibraries( programFiles86, programFiles, xdgDataHome, home );
+
+		List<File> candidates = buildDatsDirCandidates(
+			home, xdgDataHome, winePrefix, programFiles86, programFiles, steamLibraries );
+
+		File result = null;
+
+		for ( File candidate : candidates ) {
+			// Resolve symlinks.
+			try {candidate = candidate.getCanonicalFile();}
+			catch ( IOException e ) {continue;}
+
+			if ( isDatsDirValid( candidate ) ) {
+				result = candidate;
+				break;
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Builds findDatsDir()'s candidate list, in probe order.
+	 *
+	 * Inputs are explicit rather than read from the environment so the
+	 * ordering stays testable. The pre-existing locations come first and
+	 * the derived ones (extra Steam libraries, flatpak) after, so a game
+	 * installed in both places still resolves to the classic location.
+	 */
+	static List<File> buildDatsDirCandidates(
+		String home, String xdgDataHome, String winePrefix,
+		String programFiles86, String programFiles, List<String> steamLibraries ) {
+
+		String steamPath = "Steam/steamapps/common/FTL Faster Than Light";
+		String gogPath = "GOG.com/Faster Than Light";
+		String humblePath = "FTL";
 
 		List<File> candidates = new ArrayList<File>();
 		// Windows - Steam, GOG, Humble Bundle.
@@ -123,20 +157,106 @@ public class FTLUtilities {
 		// OSX - Standalone.
 		candidates.add( new File( "/Applications/FTL.app/Contents/Resources" ) );
 
-		File result = null;
-
-		for ( File candidate : candidates ) {
-			// Resolve symlinks.
-			try {candidate = candidate.getCanonicalFile();}
-			catch ( IOException e ) {continue;}
-
-			if ( isDatsDirValid( candidate ) ) {
-				result = candidate;
-				break;
+		// Extra Steam libraries from libraryfolders.vdf. A library root holds
+		// its own steamapps/common tree; which layout lives inside (bare dats,
+		// data/, FTL.app) depends on platform, so every shape gets probed.
+		for ( String lib : steamLibraries ) {
+			String[] appDirs = {
+				lib +"/steamapps/common/FTL Faster Than Light",
+				lib +"/SteamApps/common/FTL Faster Than Light",
+			};
+			for ( String appDir : appDirs ) {
+				candidates.add( new File( appDir ) );
+				candidates.add( new File( appDir +"/resources" ) );
+				candidates.add( new File( appDir +"/data" ) );
+				candidates.add( new File( appDir +"/data/resources" ) );
 			}
+			candidates.add( new File( appDirs[0] +"/FTL.app/Contents/Resources" ) );
 		}
 
-		return result;
+		// Linux - flatpak Steam (com.valvesoftware.Steam).
+		if ( home != null ) {
+			String flatpakSteam = home +"/.var/app/com.valvesoftware.Steam/.local/share/Steam";
+			candidates.add( new File( flatpakSteam +"/steamapps/common/FTL Faster Than Light/data" ) );
+			candidates.add( new File( flatpakSteam +"/steamapps/common/FTL Faster Than Light/data/resources" ) );
+		}
+
+		return candidates;
+	}
+
+	/**
+	 * Collects the Steam library paths listed by the libraryfolders.vdf of
+	 * every default Steam install location, in discovery order.
+	 *
+	 * Only libraries that exist right now are kept -- entries for unmounted
+	 * drives would only fail the probe anyway.
+	 */
+	static List<String> gatherSteamLibraries(
+		String programFiles86, String programFiles, String xdgDataHome, String home ) {
+
+		List<File> vdfFiles = new ArrayList<File>();
+		if ( programFiles86 != null )
+			vdfFiles.add( new File( programFiles86 +"/Steam/steamapps/libraryfolders.vdf" ) );
+		if ( programFiles != null )
+			vdfFiles.add( new File( programFiles +"/Steam/steamapps/libraryfolders.vdf" ) );
+		if ( xdgDataHome != null )
+			vdfFiles.add( new File( xdgDataHome +"/Steam/steamapps/libraryfolders.vdf" ) );
+		if ( home != null ) {
+			vdfFiles.add( new File( home +"/.steam/steam/steamapps/libraryfolders.vdf" ) );
+			vdfFiles.add( new File( home +"/Library/Application Support/Steam/steamapps/libraryfolders.vdf" ) );
+			vdfFiles.add( new File( home +"/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/libraryfolders.vdf" ) );
+		}
+
+		List<String> libs = new ArrayList<String>();
+		for ( File vdfFile : vdfFiles ) {
+			for ( String lib : parseLibraryFoldersVdf( vdfFile ) ) {
+				if ( !libs.contains( lib ) && new File( lib ).isDirectory() )
+					libs.add( lib );
+			}
+		}
+		return libs;
+	}
+
+	/**
+	 * Tolerantly extracts the "path" values from a Steam libraryfolders.vdf,
+	 * in file order, with doubled separators unescaped.
+	 *
+	 * Steam has written the file at least three ways: as a vdf block with
+	 * "path" "value" lines (v1/v2) and, since the v3 rewrite, as JSON with
+	 * "path": "value" lines. Those all reduce to a "path" key followed by an
+	 * optional colon and a quoted value, which is what this matches.
+	 * Missing, truncated, or unparseable files yield what they gave up --
+	 * this never throws.
+	 */
+	static List<String> parseLibraryFoldersVdf( File vdfFile ) {
+		List<String> paths = new ArrayList<String>();
+
+		Pattern pathPtn = Pattern.compile( "\"path\"\\s*:?\\s*\"([^\"]*)\"" );
+
+		BufferedReader reader = null;
+		try {
+			reader = new BufferedReader( new InputStreamReader( new FileInputStream( vdfFile ), "UTF-8" ) );
+			String line;
+			while ( (line = reader.readLine()) != null ) {
+				Matcher m = pathPtn.matcher( line );
+				if ( !m.find() ) continue;
+
+				// vdf and JSON alike store "C:\\Steam" for C:\Steam.
+				String value = m.group( 1 ).replace( "\\\\", "\\" );
+				if ( !value.isEmpty() && !paths.contains( value ) )
+					paths.add( value );
+			}
+		}
+		catch ( IOException e ) {
+			// Absent or unreadable -- whatever was collected stands.
+		}
+		finally {
+			if ( reader != null ) {
+				try {reader.close();}
+				catch ( IOException e ) {}
+			}
+		}
+		return paths;
 	}
 
 	/**
