@@ -101,7 +101,7 @@ public class ModInfoArea extends JScrollPane {
 				if ( e.isConsumed() ) return;
 				if ( !SwingUtilities.isLeftMouseButton( e ) ) return;
 
-				AttributeSet tmpAttr = doc.getCharacterElement( textPane.viewToModel( e.getPoint() ) ).getAttributes();
+				AttributeSet tmpAttr = doc.getCharacterElement( textPane.viewToModel2D( e.getPoint() ) ).getAttributes();
 				Object targetObj = tmpAttr.getAttribute( ATTR_HYPERLINK_TARGET );
 				if ( targetObj != null ) {
 					Desktop desktop = Desktop.isDesktopSupported() ? Desktop.getDesktop() : null;
@@ -119,7 +119,7 @@ public class ModInfoArea extends JScrollPane {
 
 			@Override
 			public void mouseMoved( MouseEvent e ) {
-				AttributeSet tmpAttr = doc.getCharacterElement( textPane.viewToModel( e.getPoint() ) ).getAttributes();
+				AttributeSet tmpAttr = doc.getCharacterElement( textPane.viewToModel2D( e.getPoint() ) ).getAttributes();
 				Object targetObj = tmpAttr.getAttribute( ATTR_HYPERLINK_TARGET );
 				if ( targetObj != null ) {
 					textPane.setCursor( linkCursor );
@@ -138,7 +138,7 @@ public class ModInfoArea extends JScrollPane {
 			}
 
 			private void showMenu( MouseEvent e ) {
-				AttributeSet tmpAttr = doc.getCharacterElement( textPane.viewToModel( e.getPoint() ) ).getAttributes();
+				AttributeSet tmpAttr = doc.getCharacterElement( textPane.viewToModel2D( e.getPoint() ) ).getAttributes();
 				Object targetObj = tmpAttr.getAttribute( ATTR_HYPERLINK_TARGET );
 				if ( targetObj != null ) {  // Link menu.
 					textPane.requestFocus();
