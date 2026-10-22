@@ -43,7 +43,7 @@ public class JacksonAutoUpdateReader {
 			JsonNode latestNode = historyNode.get( "latest" );
 			aui.setLatestVersion( new ComparableVersion( latestNode.get( "version" ).textValue() ) );
 
-			Iterator<Map.Entry<String, JsonNode>> fieldIt = latestNode.get( "urls" ).fields();
+			Iterator<Map.Entry<String, JsonNode>> fieldIt = latestNode.get( "urls" ).properties().iterator();
 			while ( fieldIt.hasNext() ) {
 				Map.Entry<String, JsonNode> entry = fieldIt.next();
 				aui.putLatestURL( entry.getKey(), entry.getValue().textValue() );
