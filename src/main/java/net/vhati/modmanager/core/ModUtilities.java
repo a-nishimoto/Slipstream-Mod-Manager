@@ -54,7 +54,13 @@ public class ModUtilities {
 
 	private static final Logger log = LoggerFactory.getLogger( ModUtilities.class );
 
-	private static Pattern junkFilePtn = Pattern.compile( "[.]DS_Store$|(?:^|/)thumbs[.]db$|(?:^|/)[.]dropbox$|(?:^|/)~|~$|(?:^|/)#.+#$" );
+	// Case-insensitive: Windows writes these capitalized (Thumbs.db, Desktop.ini),
+	// and a case-sensitive pattern let the real files slip through into dats.
+	private static Pattern junkFilePtn = Pattern.compile(
+		"[.]DS_Store$|(?:^|/)thumbs[.]db$|(?:^|/)[.]dropbox$|(?:^|/)desktop[.]ini$" +
+		"|(?:^|/)[.][_].*|(?:^|/)~|~$|(?:^|/)#.+#$",
+		Pattern.CASE_INSENSITIVE
+	);
 
 
 	/**
@@ -423,11 +429,14 @@ public class ModUtilities {
 
 	/**
 	 * Returns true if a path matches known junk files, false otherwise.
+	 * Matching is case-insensitive.
 	 *
 	 * This includes:
 	 *   *.DS_Store
 	 *   thumbs.db
 	 *   .dropbox
+	 *   desktop.ini
+	 *   ._* (AppleDouble resource forks, as zipped by macOS tools)
 	 *   #*#
 	 *   ~*
 	 *   *~

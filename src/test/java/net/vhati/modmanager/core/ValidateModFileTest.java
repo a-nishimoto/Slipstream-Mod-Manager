@@ -125,6 +125,41 @@ public class ValidateModFileTest {
 		assertTrue( out.contains( "Junk file" ), out );
 	}
 
+	/**
+	 * Windows writes Thumbs.db and Desktop.ini -- capitalized -- into every
+	 * folder Explorer has opened; macOS zipping tools add AppleDouble ._ files
+	 * beside the real content. The pattern used to be case-sensitive and lacked
+	 * both names, so these files validated clean and got packed into the dats.
+	 */
+	@Test
+	public void windowsAndMacOsJunkIsFlaggedRegardlessOfCase( @TempDir File tmpDir ) throws Exception {
+		String out = validateEntries( tmpDir, "osjunk.ftl", entries(
+			"img/Thumbs.db", "x",
+			"data/thumbs.DB", "x",
+			"data/Desktop.ini", "x",
+			"fonts/DESKTOP.INI", "x",
+			"data/._ftl", "x",
+			"img/._ship.png", "x",
+			PAD_PATH, PAD_BODY ) );
+
+		assertEquals( 6, countOccurrences( out, "Junk file" ),
+			"each junk entry should be flagged: "+ out );
+	}
+
+	/**
+	 * The __MACOSX tree macOS tools generate is junk, but its folder name fails
+	 * the valid-root check first; either way it must never read as clean.
+	 */
+	@Test
+	public void macosxResourceForkTreeIsFlagged( @TempDir File tmpDir ) throws Exception {
+		String out = validateEntries( tmpDir, "mac.ftl",
+			entries( "__MACOSX/._data", "x", "__MACOSX/data/._events.xml", "x",
+				PAD_PATH, PAD_BODY ) );
+
+		assertFalse( out.contains( "No Problems" ), out );
+		assertTrue( out.contains( "Unsupported top-level folder: __MACOSX/" ), out );
+	}
+
 
 	// ---- FTL version knowledge, the irreplaceable part --------------------
 
