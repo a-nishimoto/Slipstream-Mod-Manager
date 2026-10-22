@@ -62,7 +62,9 @@ public class FTLUtilities {
 		if ( xdgDataHome == null && home != null )
 			xdgDataHome = home +"/.local/share";
 
-		String winePrefix = System.getProperty( "WINEPREFIX" );
+		// WINEPREFIX is an environment variable, not a JVM property; reading it
+		// via getProperty silently fell back to ~/.wine for every custom prefix.
+		String winePrefix = System.getenv( "WINEPREFIX" );
 		if ( winePrefix == null && home != null )
 			winePrefix = home +"/.wine";
 
